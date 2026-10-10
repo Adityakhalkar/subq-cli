@@ -11,14 +11,14 @@ Needs Node.js 20 or newer. No other dependencies.
 Run it without installing:
 
 ```sh
-npx github:Adityakhalkar/subq-cli login
-npx github:Adityakhalkar/subq-cli ask "Is this spam?" "You won a free cruise"
+npx subq-cli login
+npx subq-cli ask "Is this spam?" "You won a free cruise"
 ```
 
 Or install it once and use the short `subq` command:
 
 ```sh
-npm install -g github:Adityakhalkar/subq-cli
+npm install -g subq-cli
 subq login
 ```
 
