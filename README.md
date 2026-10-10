@@ -26,11 +26,23 @@ subq login
 
 ## Interactive session
 
-Run `subq` with no arguments to open a chat session in your terminal. The first time, it asks for your API key.
+Run `subq` with no arguments to open a session in your terminal. The first time, it asks for your API key.
+
+It picks the mode from what your key can use. If your key has `subq-preview`, it is a chat. If it only has `subq-snap-preview` (the usual case in the public preview), you ask yes/no questions and get a probability back:
+
+```
+> Is this spam? | You won a free cruise, click here to claim
+● Yes  ████████████████████ 98% yes
+  ⎿ 93 in, 0 out, 93 tokens this session
+```
+
+Put the text to judge after a `|`, or load a file with `/file` and ask several questions about it. With no text, the model answers from general knowledge.
+
+In chat mode it looks like this:
 
 ```
 ╭────────────────────────────────────────────────────────╮
-│ ✻ subq v0.2.0                                          │
+│ ✻ subq v0.2.1                                          │
 │                                                        │
 │ /help for commands, Ctrl-C to interrupt, /exit to quit │
 │ model: subq-preview                                    │
@@ -49,7 +61,8 @@ Replies stream as they are generated and the conversation keeps its history. Ctr
 | `/model [id]` | list the models your key can use, or switch to one |
 | `/effort [level\|off]` | set the reasoning effort (`none` is fastest) |
 | `/system [text\|off]` | set or remove the system prompt |
-| `/ask <question> \| <text>` | yes/no probability from `subq-snap-preview` |
+| `/ask <question> \| <text>` | yes/no probability from `subq-snap-preview`, from inside a chat |
+| `/file [path\|off]` | load a text file to ask questions about |
 | `/clear` | start a new conversation |
 | `/exit` | quit (or Ctrl-D) |
 
@@ -60,7 +73,7 @@ Replies stream as they are generated and the conversation keeps its history. Ctr
 ```sh
 # Yes/no: prints the probability of yes, from 0 to 1
 subq ask "Is this spam?" "You won a free cruise, click here"
-# 0.97
+# 0.981
 
 # Say what counts as yes and no
 subq ask "Should a nurse see this?" --yes "breathing trouble or chest pain" --no "stable symptoms" < note.txt

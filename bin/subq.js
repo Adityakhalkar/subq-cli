@@ -223,13 +223,15 @@ async function ask(argv) {
 
   // The answer alone goes to stdout so it pipes cleanly; details go to stderr.
   const a = out.answers?.answer ?? fail(`Unexpected response: ${JSON.stringify(out)}`);
-  console.log(a[a.type]);
+  // The API returns float32 noise like 0.9844077229499817; three decimals is all the signal there is.
+  const round = (v) => (typeof v === "number" ? +v.toFixed(3) : v);
+  console.log(round(a[a.type]));
   const details = [];
   if (a.probabilities) {
     const name = (k) => a.legend?.[k] ?? k;
-    details.push(Object.entries(a.probabilities).map(([k, p]) => `${name(k)} ${p}`).join(", "));
+    details.push(Object.entries(a.probabilities).map(([k, p]) => `${name(k)} ${round(p)}`).join(", "));
   }
-  if (a.confidence != null) details.push(`confidence ${a.confidence}`);
+  if (a.confidence != null) details.push(`confidence ${round(a.confidence)}`);
   if (out.usage) details.push(`tokens: ${out.usage.input_tokens} in / ${out.usage.output_tokens} out`);
   if (details.length) console.error(dim(details.join(" | ")));
 }
@@ -295,7 +297,8 @@ const TUI_HELP = [
   ["/model [id]", "list models, or switch to one"],
   ["/effort [level|off]", "reasoning effort, e.g. none, medium, high"],
   ["/system [text|off]", "set or remove the system prompt"],
-  ["/ask <question> | <text>", "yes/no probability from subq-snap-preview"],
+  ["/ask <question> [| text]", "yes/no probability from subq-snap-preview"],
+  ["/file [path|off]", "load a text file to ask questions about"],
   ["/exit", "quit (or Ctrl-D)"],
 ];
 
@@ -318,6 +321,19 @@ async function tui(o = {}) {
   let model = o.model || "subq-preview";
   let effort = o.effort;
   let system = o.system;
+  let context;
+  // Keys in the public preview often only have the decision model, which answers yes/no questions instead of chatting.
+  const decision = () => model.startsWith("subq-snap");
+  if (!o.model) {
+    try {
+      const { data = [] } = await (await api("/models")).json();
+      const ids = data.map((m) => m.id);
+      if (!ids.includes(model)) model = ids.find((id) => id.startsWith("subq-snap")) ?? model;
+    } catch (e) {
+      if (!(e instanceof Fail)) throw e;
+    }
+  }
+  const HOW = "Ask a yes/no question. Add `| text` to judge some text, or /file to load one.";
   let messages = [];
   let busy = false;
   let controller;
@@ -330,6 +346,7 @@ async function tui(o = {}) {
       "",
       faint("/help for commands, Ctrl-C to interrupt, /exit to quit"),
       faint(`model: ${model}`),
+      ...(decision() ? [faint(HOW)] : []),
       faint(`cwd: ${process.cwd().replace(homedir(), "~")}`),
     ];
     const inner = Math.max(...rows.map(width));
@@ -372,7 +389,7 @@ async function tui(o = {}) {
     } catch (e) {
       stop();
       if (controller.signal.aborted) note("Interrupted");
-      else if (e instanceof Fail) note(e.message, red);
+      else if (e instanceof Fail) note(e.message.replace("Run `subq models`", "Type /model"), red);
       else throw e;
       return false;
     } finally {
@@ -382,13 +399,14 @@ async function tui(o = {}) {
 
   const say = async (content) => {
     messages.push({ role: "user", content });
+    const prelude = [system, context && `Use this document to answer:\n\n${context}`].filter(Boolean).join("\n\n");
     let started = false;
     const done = await run(async (stop, signal) => {
       try {
         const { text, usage } = await streamChat(
           {
             model,
-            messages: system ? [{ role: "system", content: system }, ...messages] : messages,
+            messages: prelude ? [{ role: "system", content: prelude }, ...messages] : messages,
             ...(effort && { reasoning_effort: effort }),
           },
           (delta) => {
@@ -414,6 +432,28 @@ async function tui(o = {}) {
     if (!done) messages.pop();
   };
 
+  const judge = (input) => {
+    const cut = input.indexOf("|");
+    const instructions = (cut < 0 ? input : input.slice(0, cut)).trim();
+    const state = (cut < 0 ? "" : input.slice(cut + 1).trim()) || context || "No additional context was provided.";
+    if (!instructions) return note("usage: Is this spam? | You won a free cruise");
+    return run(async (stop, signal) => {
+      const body = {
+        model: decision() ? model : "subq-snap-preview",
+        state,
+        questions: { answer: { type: "noul", instructions } },
+      };
+      const out = await (await api("/systemone", body, undefined, signal)).json();
+      stop();
+      const p = out.answers?.answer?.noul;
+      if (typeof p !== "number") fail(`Unexpected response: ${JSON.stringify(out)}`);
+      const filled = Math.round(p * 20);
+      const bar = accent("█".repeat(filled)) + faint("░".repeat(20 - filled));
+      console.log(`${accent("●")} ${bold(p >= 0.5 ? "Yes" : "No")}  ${bar} ${Math.round(p * 100)}% yes`);
+      if (out.usage) count(out.usage, "input_tokens", "output_tokens");
+    });
+  };
+
   const slash = async (line) => {
     const [name, ...words] = line.split(" ");
     const arg = words.join(" ").trim();
@@ -422,10 +462,10 @@ async function tui(o = {}) {
       messages = [];
       process.stdout.write("\x1b[2J\x1b[3J\x1b[H");
       banner();
-    } else if (name === "/model") {
+    } else if (name === "/model" || name === "/models") {
       if (arg) {
         model = arg;
-        return note(`model set to ${model}`);
+        return note(`model set to ${model}${decision() ? `\n${HOW}` : ""}`);
       }
       await run(async (stop, signal) => {
         const { data = [] } = await (await api("/models", null, undefined, signal)).json();
@@ -440,17 +480,19 @@ async function tui(o = {}) {
       if (arg) system = arg === "off" ? undefined : arg;
       note(`system prompt: ${system ?? "none"}`);
     } else if (name === "/ask") {
-      const cut = arg.indexOf("|");
-      const instructions = arg.slice(0, cut).trim();
-      const state = arg.slice(cut + 1).trim();
-      if (cut < 0 || !instructions || !state) return note("usage: /ask Is this spam? | You won a free cruise");
-      await run(async (stop, signal) => {
-        const body = { model: "subq-snap-preview", state, questions: { answer: { type: "noul", instructions } } };
-        const out = await (await api("/systemone", body, undefined, signal)).json();
-        stop();
-        console.log(`${accent("●")} ${out.answers?.answer?.noul} ${faint("probability of yes")}`);
-        if (out.usage) count(out.usage, "input_tokens", "output_tokens");
-      });
+      await judge(arg);
+    } else if (name === "/file") {
+      if (!arg) return note(context ? `${context.length} characters loaded` : "usage: /file notes.txt (or /file off)");
+      if (arg === "off") {
+        context = undefined;
+        return note("file removed");
+      }
+      try {
+        context = readFileSync(arg.replace(/^~/, homedir()), "utf8");
+      } catch (e) {
+        return note(e.message, red);
+      }
+      note(`loaded ${arg} (${context.length} characters). Questions are now asked about this file.`);
     } else note(`Unknown command ${name}. Try /help`);
   };
 
@@ -504,6 +546,7 @@ async function tui(o = {}) {
     if (!input) continue;
     if (input === "/exit" || input === "/quit") break;
     if (input.startsWith("/")) await slash(input);
+    else if (decision()) await judge(input);
     else await say(input);
   }
   rl.removeAllListeners("close");
