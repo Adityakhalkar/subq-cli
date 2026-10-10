@@ -1,0 +1,30 @@
+{
+  "name": "subq-cli",
+  "version": "0.1.0",
+  "description": "Unofficial command-line client for the SubQ API: log in once, then ask and chat from your terminal",
+  "type": "module",
+  "bin": {
+    "subq": "bin/subq.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "subq",
+    "cli",
+    "llm",
+    "ai"
+  ],
+  "author": "Aditya Khalkar",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Adityakhalkar/subq-cli.git"
+  }
+}
