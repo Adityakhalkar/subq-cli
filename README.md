@@ -24,6 +24,35 @@ subq login
 
 `subq login` asks for your key (create one at [console.subq.ai](https://console.subq.ai)), checks it with one tiny request (about 100 tokens), and saves it to `~/.config/subq/config.json` with owner-only permissions. Setting `SUBQ_API_KEY` in your environment works too and takes priority.
 
+## Interactive session
+
+Run `subq` with no arguments to open a chat session in your terminal. The first time, it asks for your API key.
+
+```
+╭────────────────────────────────────────────────────────╮
+│ ✻ subq v0.2.0                                          │
+│                                                        │
+│ /help for commands, Ctrl-C to interrupt, /exit to quit │
+│ model: subq-preview                                    │
+│ cwd: ~/projects/app                                    │
+╰────────────────────────────────────────────────────────╯
+
+> what is a noul?
+● A noul is a yes/no gate...
+  ⎿ 12 in, 48 out, 60 tokens this session
+```
+
+Replies stream as they are generated and the conversation keeps its history. Ctrl-C stops a reply, a trailing `\` continues your message on the next line, and Tab completes commands.
+
+| Command | What it does |
+| --- | --- |
+| `/model [id]` | list the models your key can use, or switch to one |
+| `/effort [level\|off]` | set the reasoning effort (`none` is fastest) |
+| `/system [text\|off]` | set or remove the system prompt |
+| `/ask <question> \| <text>` | yes/no probability from `subq-snap-preview` |
+| `/clear` | start a new conversation |
+| `/exit` | quit (or Ctrl-D) |
+
 ## Ask: judgments from `subq-snap-preview`
 
 `subq ask <question> [state]` sends one question about a piece of text (the *state*) to the Decisions API. Pass the state as the second argument or pipe it in.
@@ -61,7 +90,6 @@ Probabilities, confidence and token usage go to stderr. Use `--json` for the ful
 ```sh
 subq chat "Explain server-sent events in two sentences"
 git diff | subq chat "Write a commit message for this diff"
-subq chat                       # interactive, /exit or Ctrl-D to quit
 subq chat -s "Reply in French" -e none "Hello"
 ```
 
