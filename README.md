@@ -26,45 +26,52 @@ subq login
 
 ## Interactive session
 
-Run `subq` with no arguments to open a session in your terminal. The first time, it asks for your API key.
-
-It picks the mode from what your key can use. If your key has `subq-preview`, it is a chat. If it only has `subq-snap-preview` (the usual case in the public preview), you ask yes/no questions and get a probability back:
+Run `subq` with no arguments to open a session in your terminal. The first time, it asks for your API key. If you use Claude Code, the keys and commands will feel familiar.
 
 ```
+╭──────────────────────────────────────────────────────────────────╮
+│ ✻ subq v0.3.0                                                    │
+│                                                                  │
+│ / commands · @ files · ! shell · Esc to interrupt                │
+│ model: subq-snap-preview                                         │
+│ Ask a yes/no question. Add `| text` or @file to judge something. │
+│ cwd: ~/projects/app                                              │
+╰──────────────────────────────────────────────────────────────────╯
+
 > Is this spam? | You won a free cruise, click here to claim
 ● Yes  ████████████████████ 98% yes
   ⎿ 93 in, 0 out, 93 tokens this session
 ```
 
-Put the text to judge after a `|`, or load a file with `/file` and ask several questions about it. With no text, the model answers from general knowledge.
+It picks the mode from what your key can use:
 
-In chat mode it looks like this:
+- **`subq-snap-preview`** (the usual case in the public preview): you ask yes/no questions and get a probability back. Put the text to judge after a `|`, attach it with `@file`, or leave it out and the model answers from general knowledge.
+- **`subq-preview`**: a streaming chat that keeps its history.
 
-```
-╭────────────────────────────────────────────────────────╮
-│ ✻ subq v0.2.1                                          │
-│                                                        │
-│ /help for commands, Ctrl-C to interrupt, /exit to quit │
-│ model: subq-preview                                    │
-│ cwd: ~/projects/app                                    │
-╰────────────────────────────────────────────────────────╯
+`/model` opens a picker that also shows models your key does not have yet.
 
-> what is a noul?
-● A noul is a yes/no gate...
-  ⎿ 12 in, 48 out, 60 tokens this session
-```
-
-Replies stream as they are generated and the conversation keeps its history. Ctrl-C stops a reply, a trailing `\` continues your message on the next line, and Tab completes commands.
+| Type | What it does |
+| --- | --- |
+| `/` | lists the commands as you type; Tab completes, and a unique prefix like `/mo` is enough |
+| `@path` | attaches a text file, or an image (PNG, JPEG, WebP) in question mode. Tab completes paths |
+| `!command` | runs a shell command; your next messages are about its output |
+| `\` at end of line | continues the message on the next line |
+| Esc or Ctrl-C | stops a reply. Ctrl-C twice, Ctrl-D or `/exit` quits |
+| ↑ | previous messages, kept between sessions |
 
 | Command | What it does |
 | --- | --- |
-| `/model [id]` | list the models your key can use, or switch to one |
-| `/effort [level\|off]` | set the reasoning effort (`none` is fastest) |
-| `/system [text\|off]` | set or remove the system prompt |
-| `/ask <question> \| <text>` | yes/no probability from `subq-snap-preview`, from inside a chat |
-| `/file [path\|off]` | load a text file to ask questions about |
+| `/model` | pick a model |
 | `/clear` | start a new conversation |
-| `/exit` | quit (or Ctrl-D) |
+| `/status` | model, key and connection details |
+| `/cost` | tokens used this session |
+| `/login`, `/logout` | change or delete the saved API key |
+| `/effort [level\|off]` | reasoning effort for chat (`none` is fastest) |
+| `/system [text\|off]` | set or remove the chat system prompt |
+| `/file [path\|off]` | load a text file to ask several questions about |
+| `/ask <question> \| <text>` | yes/no probability, from inside a chat |
+
+For scripts, `subq -p "question"` prints one answer and exits, using chat if your key has it and a yes/no judgment otherwise.
 
 ## Ask: judgments from `subq-snap-preview`
 

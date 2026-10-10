@@ -107,6 +107,12 @@ test("chat: streams deltas and appends piped stdin to the prompt", async () => {
   assert.deepEqual(last.body.messages, [{ role: "user", content: "Summarise\n\nthe diff" }]);
 });
 
+test("-p: uses chat when the key has the chat model", async () => {
+  const r = await run(["-p", "Summarise"], { input: "the diff" });
+  assert.equal(r.stdout, "Hello\n");
+  assert.equal(last.url, "/v1/chat/completions");
+});
+
 test("login: verifies, saves with 0600, and later commands use the saved key", async () => {
   const noEnv = { env: { SUBQ_API_KEY: "" } };
   const bad = await run(["login"], { input: "sk-bad\n", ...noEnv });

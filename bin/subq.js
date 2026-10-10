@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
-import { readFileSync, writeFileSync, mkdirSync, rmSync, chmodSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, rmSync, chmodSync, readdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
-import { join, extname } from "node:path";
+import { join, extname, dirname, basename } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 
 const BASE = (process.env.SUBQ_BASE_URL || "https://api.subq.ai/v1").replace(/\/$/, "");
 const CONFIG_DIR = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "subq");
 const CONFIG = join(CONFIG_DIR, "config.json");
+const HISTORY = join(CONFIG_DIR, "history");
 const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 
 const HELP = `subq ${version} - unofficial CLI for the SubQ API
@@ -20,6 +22,7 @@ Usage:
   subq models                        List models your key can use
   subq ask <question> [state]        Ask subq-snap-preview for a judgment
   subq chat [prompt]                 One-off chat with subq-preview
+  subq -p <prompt>                   One-off answer from whichever model your key has
 
 ask options:
   (default)                 yes/no: prints the probability of yes, 0 to 1
@@ -134,8 +137,7 @@ function readKey() {
   });
 }
 
-async function login() {
-  const key = await readKey();
+async function saveKey(key) {
   if (!key) fail("No key entered.");
   // GET /models answers 200 for any key, so the only real check is a tiny billed decision (about 100 tokens).
   const probe = { model: "subq-snap-preview", state: "ok", questions: { answer: { type: "noul", instructions: "Is this ok?" } } };
@@ -150,7 +152,11 @@ async function login() {
   mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
   writeFileSync(CONFIG, JSON.stringify({ apiKey: key }, null, 2) + "\n", { mode: 0o600 });
   chmodSync(CONFIG, 0o600);
-  console.log(`Key verified and saved to ${CONFIG}${note}`);
+  return `Key verified and saved to ${CONFIG}${note}`;
+}
+
+async function login() {
+  console.log(await saveKey(await readKey()));
 }
 
 function logout() {
@@ -170,7 +176,7 @@ const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
 
 const MEDIA = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
 
-async function ask(argv) {
+async function ask(argv, fallbackState) {
   const { values: o, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
@@ -187,7 +193,7 @@ async function ask(argv) {
   const [instructions, ...rest] = positionals;
   if (!instructions) fail('Missing question. Example: subq ask "Is this spam?" "You won a free cruise"');
   if (o.choice && o.score) fail("Use --choice or --score, not both.");
-  const state = rest.join(" ") || (await readStdin());
+  const state = rest.join(" ") || (await readStdin()) || fallbackState;
   if (!state) fail("Missing state: pass the text to judge as a second argument or pipe it on stdin.");
 
   const question = { type: "noul", instructions };
@@ -291,15 +297,32 @@ async function chat(argv) {
   if (usage) console.error(dim(`tokens: ${usage.prompt_tokens} in / ${usage.completion_tokens} out`));
 }
 
+// `subq -p`: chat if the key has the chat model, otherwise a yes/no judgment.
+async function print(argv) {
+  const { data = [] } = await (await api("/models")).json();
+  if (data.some((m) => m.id === "subq-preview")) return chat(argv);
+  return ask(argv, "No additional context was provided.");
+}
+
+const MODELS = { "subq-preview": "chat", "subq-snap-preview": "yes/no questions" };
+
 const TUI_HELP = [
   ["/help", "show this list"],
   ["/clear", "start a new conversation"],
-  ["/model [id]", "list models, or switch to one"],
+  ["/model [id]", "pick a model"],
   ["/effort [level|off]", "reasoning effort, e.g. none, medium, high"],
   ["/system [text|off]", "set or remove the system prompt"],
   ["/ask <question> [| text]", "yes/no probability from subq-snap-preview"],
   ["/file [path|off]", "load a text file to ask questions about"],
+  ["/status", "model, key and connection details"],
+  ["/cost", "tokens used this session"],
+  ["/login", "save a different API key"],
+  ["/logout", "delete the saved API key"],
   ["/exit", "quit (or Ctrl-D)"],
+  ["@path", "attach a file or image to your message"],
+  ["!command", "run a shell command and ask about its output"],
+  ["\\ at end of line", "continue on the next line"],
+  ["Esc or Ctrl-C", "interrupt a reply"],
 ];
 
 async function tui(o = {}) {
@@ -318,6 +341,7 @@ async function tui(o = {}) {
     await login();
   }
 
+  const names = TUI_HELP.map(([cmd]) => cmd.split(" ")[0]).filter((n) => n.startsWith("/"));
   let model = o.model || "subq-preview";
   let effort = o.effort;
   let system = o.system;
@@ -333,9 +357,12 @@ async function tui(o = {}) {
       if (!(e instanceof Fail)) throw e;
     }
   }
-  const HOW = "Ask a yes/no question. Add `| text` to judge some text, or /file to load one.";
+  const HOW = "Ask a yes/no question. Add `| text` or @file to judge something.";
   let messages = [];
   let busy = false;
+  let picking = false;
+  let secret = false;
+  let menuRows = 0;
   let controller;
   let lastInterrupt = 0;
   const total = { in: 0, out: 0 };
@@ -344,7 +371,7 @@ async function tui(o = {}) {
     const rows = [
       `${accent("✻")} ${bold("subq")} ${faint(`v${version}`)}`,
       "",
-      faint("/help for commands, Ctrl-C to interrupt, /exit to quit"),
+      faint("/ commands · @ files · ! shell · Esc to interrupt"),
       faint(`model: ${model}`),
       ...(decision() ? [faint(HOW)] : []),
       faint(`cwd: ${process.cwd().replace(homedir(), "~")}`),
@@ -397,7 +424,74 @@ async function tui(o = {}) {
     }
   };
 
-  const say = async (content) => {
+  // Replaces @path mentions with the file's contents. Anything that is not a readable file is left alone.
+  const attach = (input) => {
+    const docs = [];
+    const images = [];
+    const names = [];
+    const text = input.replace(/(^|\s)@(\S+)/g, (whole, lead, raw) => {
+      for (const name of [raw, raw.replace(/[?.,!;:]+$/, "")]) {
+        const path = name.replace(/^~/, homedir());
+        const mediaType = MEDIA[extname(path).toLowerCase()];
+        try {
+          if (mediaType) images.push({ mediaType, base64: readFileSync(path).toString("base64") });
+          else docs.push(`${name}:\n${readFileSync(path, "utf8")}`);
+        } catch {
+          continue;
+        }
+        names.push(name);
+        return `${lead}${raw}`;
+      }
+      return whole;
+    });
+    if (names.length) note(`attached ${names.join(", ")}`);
+    return { text, docs: docs.join("\n\n"), images };
+  };
+
+  const shell = (command) => {
+    const r = spawnSync(command, { shell: true, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 10 * 1024 * 1024 });
+    if (r.error) return note(r.error.message, red);
+    const text = `${r.stdout}${r.stderr}`.trimEnd();
+    if (!text) return note(`exit ${r.status}, no output`);
+    console.log(text);
+    context = `$ ${command}\n${text}`;
+    note(`exit ${r.status}. Your next messages are about this output (/file off to drop it)`);
+  };
+
+  // Arrow-key list. Resolves with the chosen item, or null on Esc.
+  const pick = (title, items, start) =>
+    new Promise((resolve) => {
+      let at = Math.max(0, start);
+      picking = true;
+      const draw = (first) => {
+        if (!first) process.stdout.write(`\x1b[${items.length + 1}A`);
+        process.stdout.write(`\x1b[J${faint(title)}\n`);
+        const wide = Math.max(...items.map((item) => item.label.length));
+        items.forEach((item, i) => {
+          const label = item.label.padEnd(wide);
+          console.log(`${i === at ? accent("❯") : " "} ${i === at ? bold(label) : label}  ${faint(item.hint)}`);
+        });
+      };
+      const onKey = (_s, key = {}) => {
+        if (key.name === "up" || key.name === "k") at = (at + items.length - 1) % items.length;
+        else if (key.name === "down" || key.name === "j") at = (at + 1) % items.length;
+        else if (key.name === "return" || key.name === "escape" || (key.ctrl && key.name === "c")) {
+          process.stdin.off("keypress", onKey);
+          process.stdout.write(`\x1b[${items.length + 1}A\x1b[J`);
+          rl.write(null, { ctrl: true, name: "u" }); // drop what readline collected from those keys
+          picking = false;
+          return resolve(key.name === "return" ? items[at] : null);
+        } else return;
+        draw();
+      };
+      process.stdin.on("keypress", onKey);
+      draw(true);
+    });
+
+  const say = async (input) => {
+    const { text: typed, docs, images } = attach(input);
+    if (images.length) note("Images only work with subq-snap-preview; sending the text only.");
+    const content = docs ? `${typed}\n\n${docs}` : typed;
     messages.push({ role: "user", content });
     const prelude = [system, context && `Use this document to answer:\n\n${context}`].filter(Boolean).join("\n\n");
     let started = false;
@@ -433,15 +527,18 @@ async function tui(o = {}) {
   };
 
   const judge = (input) => {
-    const cut = input.indexOf("|");
-    const instructions = (cut < 0 ? input : input.slice(0, cut)).trim();
-    const state = (cut < 0 ? "" : input.slice(cut + 1).trim()) || context || "No additional context was provided.";
+    const { text, docs, images } = attach(input);
+    const cut = text.indexOf("|");
+    const instructions = (cut < 0 ? text : text.slice(0, cut)).trim();
+    const given = [cut < 0 ? "" : text.slice(cut + 1).trim(), docs].filter(Boolean).join("\n\n");
+    const state = given || context || (images.length ? "See the attached image." : "No additional context was provided.");
     if (!instructions) return note("usage: Is this spam? | You won a free cruise");
     return run(async (stop, signal) => {
       const body = {
         model: decision() ? model : "subq-snap-preview",
         state,
         questions: { answer: { type: "noul", instructions } },
+        ...(images.length && { images }),
       };
       const out = await (await api("/systemone", body, undefined, signal)).json();
       stop();
@@ -455,11 +552,15 @@ async function tui(o = {}) {
   };
 
   const slash = async (line) => {
-    const [name, ...words] = line.split(" ");
+    const [typed, ...words] = line.split(" ");
     const arg = words.join(" ").trim();
+    // A unique prefix is enough: /mo runs /model.
+    const matches = names.filter((n) => n.startsWith(typed));
+    const name = !names.includes(typed) && matches.length === 1 ? matches[0] : typed;
     if (name === "/help") for (const [cmd, what] of TUI_HELP) console.log(`  ${accent(cmd.padEnd(26))} ${faint(what)}`);
     else if (name === "/clear") {
       messages = [];
+      context = undefined;
       process.stdout.write("\x1b[2J\x1b[3J\x1b[H");
       banner();
     } else if (name === "/model" || name === "/models") {
@@ -467,12 +568,22 @@ async function tui(o = {}) {
         model = arg;
         return note(`model set to ${model}${decision() ? `\n${HOW}` : ""}`);
       }
-      await run(async (stop, signal) => {
-        const { data = [] } = await (await api("/models", null, undefined, signal)).json();
+      let ids;
+      if (!(await run(async (stop, signal) => {
+        ids = ((await (await api("/models", null, undefined, signal)).json()).data ?? []).map((m) => m.id);
         stop();
-        for (const m of data) console.log(`  ${m.id === model ? accent("●") : " "} ${m.id}`);
-        note("switch with /model <id>");
-      });
+      }))) return;
+      const items = [...new Set([...ids, ...Object.keys(MODELS)])].map((id) => ({
+        id,
+        label: id,
+        locked: !ids.includes(id),
+        hint: [MODELS[id], ids.includes(id) ? id === model && "current" : "not enabled for this key"].filter(Boolean).join(" · "),
+      }));
+      const choice = await pick("Select a model  ↑↓ move · Enter choose · Esc cancel", items, items.findIndex((i) => i.id === model));
+      if (!choice) return note(`model unchanged (${model})`);
+      if (choice.locked) return note(`${choice.id} is not enabled for this API key. Ask SubQ to turn it on for your account.`);
+      model = choice.id;
+      note(`model set to ${model}${decision() ? `\n${HOW}` : ""}`);
     } else if (name === "/effort") {
       if (arg) effort = arg === "off" ? undefined : arg;
       note(`reasoning effort: ${effort ?? "model default"}`);
@@ -493,35 +604,112 @@ async function tui(o = {}) {
         return note(e.message, red);
       }
       note(`loaded ${arg} (${context.length} characters). Questions are now asked about this file.`);
+    } else if (name === "/status") {
+      console.log(`  ${faint("version")}  ${version}`);
+      console.log(`  ${faint("model")}    ${model} ${faint(`(${decision() ? "yes/no questions" : "chat"})`)}`);
+      console.log(`  ${faint("api key")}  ${process.env.SUBQ_API_KEY ? "SUBQ_API_KEY environment variable" : CONFIG}`);
+      console.log(`  ${faint("api")}      ${BASE}`);
+      console.log(`  ${faint("context")}  ${context ? `${context.length} characters` : "none"}`);
+    } else if (name === "/cost") {
+      note(`${total.in} in, ${total.out} out, ${total.in + total.out} tokens this session. Rates and balance: https://console.subq.ai`);
+    } else if (name === "/login") {
+      secret = true;
+      process.stdout.write("API key (input hidden): ");
+      const key = (await rl.question("")).trim();
+      if (rl.history[0] === key) rl.history.shift(); // never keep the key in input history
+      secret = false;
+      process.stdout.write("\n");
+      await run(async (stop) => {
+        const saved = await saveKey(key);
+        stop();
+        note(saved + (process.env.SUBQ_API_KEY ? "\nSUBQ_API_KEY is set in your environment and still takes priority." : ""));
+      });
+    } else if (name === "/logout") {
+      rmSync(CONFIG, { force: true });
+      note("Saved key removed.");
     } else note(`Unknown command ${name}. Try /help`);
   };
 
   // Keystrokes typed while a reply is streaming would be echoed into it, so readline's output is muted while busy.
   const output = new Writable({
     write(chunk, _encoding, callback) {
-      if (!busy) process.stdout.write(chunk);
+      if (!busy && !picking && !secret) process.stdout.write(chunk);
       callback();
     },
   });
   Object.defineProperty(output, "columns", { get: () => process.stdout.columns });
-  const names = TUI_HELP.map(([cmd]) => cmd.split(" ")[0]);
+  let history = [];
+  try {
+    history = readFileSync(HISTORY, "utf8").split("\n").filter(Boolean);
+  } catch {}
   const rl = createInterface({
     input: process.stdin,
     output,
     terminal: true,
-    completer: (line) => [line.startsWith("/") ? names.filter((n) => n.startsWith(line)) : [], line],
+    history,
+    historySize: 500,
+    removeHistoryDuplicates: true,
+    completer: (line) => {
+      if (/^\/\S*$/.test(line)) {
+        // Several matches are already listed under the prompt, so Tab only completes a unique one.
+        const hits = names.filter((n) => n.startsWith(line));
+        return [hits.length === 1 ? hits : [], line];
+      }
+      const typed = line.match(/(?:^|\s)@(\S*)$/)?.[1];
+      if (typed == null) return [[], line];
+      const path = typed.replace(/^~/, homedir());
+      const base = path.endsWith("/") ? "" : basename(path);
+      try {
+        const hits = readdirSync(path.endsWith("/") ? path : dirname(path) || ".", { withFileTypes: true })
+          .filter((e) => e.name.startsWith(base) && (base.startsWith(".") || !e.name.startsWith(".")))
+          .map((e) => typed.slice(0, typed.length - base.length) + e.name + (e.isDirectory() ? "/" : ""));
+        return [hits, typed];
+      } catch {
+        return [[], typed];
+      }
+    },
   });
+
+  // Lists matching commands under the prompt while a slash command is being typed.
+  const menu = () => {
+    if (busy || picking || secret) return;
+    const hits = /^\/\S*$/.test(rl.line) ? TUI_HELP.filter(([cmd]) => cmd.split(" ")[0].startsWith(rl.line)) : [];
+    if (!hits.length && !menuRows) return;
+    const rows = hits.map(([cmd, what]) => faint(`  ${cmd.padEnd(26)} ${what}`.slice(0, (process.stdout.columns || 80) - 1)));
+    menuRows = rows.length;
+    // Draw below the prompt, then put the cursor back where the user is typing (the prompt is 2 columns wide).
+    process.stdout.write(`\n\x1b[J${rows.join("\n")}\x1b[${Math.max(rows.length, 1)}A\x1b[${rl.cursor + 3}G`);
+  };
+  process.stdin.on("keypress", (_s, key = {}) => {
+    if (key.name === "escape" && busy) return controller.abort();
+    if (busy || picking || secret) return;
+    if (key.name === "return" || key.name === "enter") {
+      if (menuRows) process.stdout.write("\x1b[J");
+      menuRows = 0;
+      return;
+    }
+    setImmediate(menu); // after readline has applied the key
+  });
+
   const bye = () => {
+    try {
+      mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
+      writeFileSync(HISTORY, rl.history.filter((h) => h !== "/exit" && h !== "/quit").join("\n") + "\n", { mode: 0o600 });
+    } catch {}
     if (total.in + total.out) console.log(faint(`${total.in + total.out} tokens used this session`));
     process.exit(0);
   };
   rl.on("close", () => {
-    process.stdout.write("\n");
+    process.stdout.write("\n\x1b[J");
     bye();
   });
   rl.on("SIGINT", () => {
     if (busy) return controller.abort();
-    if (rl.line) return rl.write(null, { ctrl: true, name: "u" });
+    if (picking || secret) return;
+    if (rl.line) {
+      rl.write(null, { ctrl: true, name: "u" });
+      return setImmediate(menu);
+    }
     if (Date.now() - lastInterrupt < 2000) return rl.close();
     lastInterrupt = Date.now();
     process.stdout.write(`\n${faint("Press Ctrl-C again to exit")}\n`);
@@ -545,7 +733,9 @@ async function tui(o = {}) {
     pending = "";
     if (!input) continue;
     if (input === "/exit" || input === "/quit") break;
-    if (input.startsWith("/")) await slash(input);
+    if (input === "?") await slash("/help");
+    else if (input.startsWith("!")) shell(input.slice(1).trim());
+    else if (input.startsWith("/")) await slash(input);
     else if (decision()) await judge(input);
     else await say(input);
   }
@@ -560,6 +750,7 @@ try {
   if (!cmd && process.stdin.isTTY && process.stdout.isTTY) await tui();
   else if (!cmd || ["help", "-h", "--help"].includes(cmd)) console.log(HELP);
   else if (["-v", "--version"].includes(cmd)) console.log(version);
+  else if (["-p", "--print"].includes(cmd)) await print(rest);
   else if (Object.hasOwn(commands, cmd)) await commands[cmd](rest);
   else fail(`Unknown command: ${cmd}. Run \`subq help\`.`);
 } catch (e) {
