@@ -1,0 +1,111 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Manrope:wght@500;700&family=Roboto+Mono:wght@400;500;700&display=block" rel="stylesheet">
+<style>
+html,body{margin:0;background:#f0ede8}
+#s{position:relative;width:1920px;height:1080px;overflow:hidden;background:#f0ede8;color:#0f0e0d;font-family:Manrope,sans-serif}
+#s *{box-sizing:border-box}
+.a{position:absolute}.serif{font-family:"Libre Baskerville",serif}.mono{font-family:"Roboto Mono",monospace}
+.soft{color:#857f74}.o{color:#eb521e}.gr{color:#3f7d31}.b{font-weight:700}
+.card{position:absolute;left:80px;top:190px;width:1290px;height:720px;background:#f8f6f2;border:3px solid #0f0e0d;box-shadow:12px 12px 0 #0f0e0d}
+.bar{height:44px;border-bottom:3px solid #0f0e0d;display:flex;align-items:center;gap:8px;padding:0 18px;font:500 20px "Roboto Mono"}
+.bar i{width:14px;height:14px;display:block}
+.body{position:absolute;left:38px;top:76px;right:38px;font:400 33px/54px "Roboto Mono";white-space:pre-wrap;word-break:break-word}
+.cur{display:inline-block;width:18px;height:38px;background:#eb521e;vertical-align:-6px;margin-left:2px}
+.track{display:inline-block;width:420px;height:32px;background:#dedad2;vertical-align:-5px;margin:0 18px}
+.track b{display:block;height:100%;background:#eb521e}
+.pill{display:inline-block;background:#0f0e0d;color:#f0ede8;font:500 52px "Roboto Mono";padding:26px 44px}
+.stamp{font:700 120px "Roboto Mono";color:#eb521e;border:12px solid #eb521e;padding:6px 40px;letter-spacing:6px;background:#f8f6f2}
+</style><script src="data.js"></script></head><body><div id="s"></div><script>
+const C={y:'#ffe237',b:'#0834bc',g:'#999489',o:'#eb521e',gr:'#3f7d31',ink:'#0f0e0d'};
+const SQ=[[0,0,C.y],[2,0,C.b],[1,1,C.g],[0,2,C.o],[2,2,C.gr]];
+const cl=(x,a=0,b=1)=>Math.min(b,Math.max(a,x)),P=(t,a,d)=>cl((t-a)/d),lerp=(a,b,x)=>a+(b-a)*x;
+const out=x=>1-(1-x)**3,io=x=>x<.5?4*x*x*x:1-(-2*x+2)**3/2,back=x=>1+2.70158*(x-1)**3+1.70158*(x-1)**2;
+const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const EV=[],ev=(t,k,v)=>EV.push({t,k,v});
+const TY={};
+function typing(id,text,start,dur){TY[id]={text,start,dur};for(let i=0;i<text.length;i++)if(text[i]!==' ')ev(start+dur*i/text.length,'key')}
+const typed=(id,t)=>{const y=TY[id],n=Math.floor(P(t,y.start,y.dur)*y.text.length);return esc(y.text.slice(0,n))+(t<y.start+y.dur+.35?'<span class="cur"></span>':'')};
+// rise: fade and slide in from below
+const rise=(t,a,d=.35,dy=40)=>{const p=out(P(t,a,d));return `opacity:${p};transform:translateY(${(1-p)*dy}px);`};
+const pop=(t,a,d=.3)=>`opacity:${P(t,a,.08)};transform:scale(${t<a?0:back(P(t,a,d))});`;
+function logo(x,y,cell,scales){return SQ.map(([cx,cy,c],i)=>`<div class="a" style="left:${x+cx*cell}px;top:${y+cy*cell}px;width:${cell}px;height:${cell}px;background:${c};transform:scale(${scales?scales[i]:1})"></div>`).join('')}
+const scene=(t,a,b,html)=>t<a||t>=b?'':`<div class="a" style="inset:0;opacity:${Math.min(P(t,a,.2),1-P(t,b-.2,.2))};transform:translateY(${(1-out(P(t,a,.3)))*30-out(P(t,b-.25,.25))*30}px)">${html}</div>`;
+const card=(inner,title='subq')=>`<div class="card"><div class="bar">${SQ.map(q=>`<i style="background:${q[2]}"></i>`).join('')}<span style="margin-left:10px">${title}</span></div><div class="body">${inner}</div></div>`;
+const cap=(t,a,n,word,sub)=>t<a?'':`<div class="a" style="left:1440px;top:330px;width:440px;${rise(t,a)}"><div class="mono o" style="font-size:28px;font-weight:700">0${n} / 06</div><div class="serif" style="font-size:104px;line-height:1.25">${word}</div><div class="soft" style="font-size:34px;line-height:1.35;margin-top:14px">${sub}</div></div>`;
+const row=(t,a,label,p,w)=>t<a?'':`<span style="${rise(t,a,.25,10)}display:inline-block">  ${label.padEnd(w)}<span class="track"><b style="width:${out(P(t,a,.5))*p}%"></b></span>${String(Math.round(out(P(t,a,.5))*p)).padStart(3)}%</span>\n`;
+const head=(t,a,txt)=>t<a?'':`<span style="${rise(t,a,.2,8)}display:inline-block"><span class="o">■</span> ${txt}</span>\n`;
+
+// ---- timeline (seconds; 120 bpm so every half second is a beat)
+[0,.25,.5,.75,1].forEach((x,i)=>ev(x,'note',i));
+[2.5,2.75,3].forEach(x=>ev(x,'pop'));
+ev(4,'whoosh');ev(4,'count',1);ev(6,'count',.8);ev(8,'whoosh');
+typing('npm','npm install -g subq-cli',8.75,.75);
+ev(10,'drop');
+typing('q1','Is this spam? | You won a free cruise, click here to claim',10.5,1);ev(12,'pop');
+typing('q2','Which team owns this? [billing, tech, sales] | I was charged twice',13,1);ev(14.5,'pop');
+typing('q3','How urgent is this? [low < medium < high] | The server is down for everyone',16,1);ev(17.5,'pop');
+ev(20,'whoosh');typing('filter','subq filter "Is this a complaint?" < reviews.txt',20.25,1.25);
+const REV=[['The app crashes every time I open settings',1,1.717],['Love the new dark mode, great work',0,.035],['I was charged twice this month, refund me now',1,1.838],['How do I export my data to CSV?',0,.158],['Worst support I have ever dealt with',1,.307],['Thanks, that fixed it!',0,.053]];
+REV.forEach((r,i)=>ev(22+i*.3,r[1]?'yes':'no'));
+ev(26,'whoosh');typing('each','subq each "How urgent?" --score low,medium,high < reviews.txt | sort -rn',26.25,1.25);
+REV.forEach((r,i)=>ev(28+i*.15,'tick'));ev(29.25,'swish');
+const ORDER=REV.map((r,i)=>REV.filter(q=>q[2]>r[2]).length);
+ev(32,'whoosh');typing('guard','git diff --cached | subq ask -t 0.5 "Does this add a secret?" && echo BLOCKED',32.25,1.25);ev(34,'pop');ev(34.5,'thump');
+ev(36,'break');ev(37,'roll',3.5);[37,38.25,39.5].forEach(x=>ev(x,'pop'));
+ev(42,'final');ev(42.75,'pop');typing('npm2','npm install -g subq-cli',42.75,.75);
+
+function render(t){
+  let h='';
+  // 1 hook
+  h+=scene(t,0,4,(()=>{const m=io(P(t,1.4,.5)),cell=lerp(120,56,m),x=960-cell*1.5,y=lerp(360,170,m);
+    return logo(x,y,cell,SQ.map((q,i)=>t<i*.25?0:back(P(t,i*.25,.3))))+
+    `<div class="a serif" style="left:0;width:1920px;top:430px;text-align:center;font-size:84px;${rise(t,1.6)}">A model that only says</div>`+
+    `<div class="a serif" style="left:0;width:1920px;top:570px;text-align:center;font-size:190px;font-style:italic"><span class="gr" style="display:inline-block;${pop(t,2.5)}">yes</span> <span style="display:inline-block;font-size:110px;${pop(t,2.75)}">or</span> <span class="o" style="display:inline-block;${pop(t,3)}">no.</span></div>`})());
+  // persistent header
+  if(t>=4&&t<42)h+=`<div class="a" style="inset:0;opacity:${P(t,4,.3)}">${logo(80,62,14)}<div class="a mono b" style="left:140px;top:64px;font-size:28px">subq-cli</div><div class="a mono soft" style="right:80px;top:68px;font-size:22px">community CLI for SubQ's Decisions API</div></div>`;
+  // 2 stats
+  h+=scene(t,4,8,`<div class="a" style="left:200px;top:210px;${rise(t,4)}"><div class="mono o b" style="font-size:28px;letter-spacing:3px">COST PER QUESTION</div><div class="mono b" style="font-size:210px;line-height:1.15">$${(0.000009*out(P(t,4,1))).toFixed(6)}</div><div class="soft" style="font-size:36px">about 100 tokens, at $0.09 per million</div></div>`+
+    (t<6?'':`<div class="a" style="left:200px;top:640px;${rise(t,6)}"><div class="mono o b" style="font-size:28px;letter-spacing:3px">ANSWERS PER SECOND</div><div class="mono b" style="font-size:210px;line-height:1.15">${Math.round(65*out(P(t,6,.8)))}</div></div><div class="a soft" style="left:520px;top:800px;font-size:36px;${rise(t,6.3)}">measured, with 24 requests in flight</div>`));
+  // 3 bridge
+  h+=scene(t,8,10,`<div class="a serif" style="left:0;width:1920px;top:340px;text-align:center;font-size:120px;${rise(t,8)}">So we built it a terminal.</div>`+
+    (t<8.6?'':`<div class="a" style="left:0;width:1920px;top:600px;text-align:center;${rise(t,8.6,.25)}"><span class="pill"><span class="o">$</span> ${typed('npm',t)}</span></div>`));
+  // 4 session
+  h+=scene(t,10,20,(()=>{
+    const banner=`<span style="display:inline-block;position:relative;width:70px;height:92px;vertical-align:top">${logo(0,8,24)}</span><span style="display:inline-block;vertical-align:top;line-height:44px;margin-left:22px"><b>SubQ</b> <span class="soft">community CLI v0.5.0\nmodel: subq-snap-preview</span></span>\n\n`;
+    let b='';
+    if(t<13)b=`<span class="o">&gt;</span> ${typed('q1',t)}\n`+head(t,12,`<b>Yes</b><span class="track"><b style="width:${out(P(t,12,.5))*98}%"></b></span>${Math.round(out(P(t,12,.5))*98)}% yes`);
+    else if(t<16)b=`<span class="o">&gt;</span> ${typed('q2',t)}\n`+head(t,14.5,'<b>billing</b>')+row(t,14.55,'billing',97,7)+row(t,14.65,'tech',1,7)+row(t,14.75,'sales',1,7);
+    else b=`<span class="o">&gt;</span> ${typed('q3',t)}\n`+head(t,17.5,'<b>high</b>  <span class="soft">1.857 on a 0 to 2 scale</span>')+row(t,17.55,'low',4,6)+row(t,17.65,'medium',6,6)+row(t,17.75,'high',90,6);
+    return card(banner+b)+(t<13?cap(t,10.3,1,'Ask.','Yes or no, with a probability.'):t<16?cap(t,13,2,'Choose.','One of your own options.'):cap(t,16,3,'Rate.','On a scale you define.'))})());
+  // 5 filter
+  h+=scene(t,20,26,card(`<span class="o">$</span> ${typed('filter',t)}\n\n`+REV.map((r,i)=>{const a=22+i*.3,j=P(t,a,.25);
+      return `<span style="display:inline-block;opacity:${r[1]?lerp(.55,1,j):lerp(.55,.25,j)};${r[1]&&j?'font-weight:500;':''}${!r[1]&&j?'text-decoration:line-through;':''}"><span class="o" style="opacity:${r[1]?j:0}">■</span> ${esc(r[0])}</span>\n`}).join('')+
+      (t<24.2?'':`\n<span class="soft" style="${rise(t,24.2,.25,8)}display:inline-block">6 judged, 3 kept, 553 tokens</span>`),'reviews.txt')+cap(t,20.2,4,'Filter.','grep, but for meaning.'));
+  // 6 rank
+  h+=scene(t,26,32,card(`<span class="o">$</span> ${typed('each',t)}\n`+`<div style="position:relative;height:380px;margin-top:34px;font-size:29px">`+REV.map((r,i)=>{const a=28+i*.15,m=io(P(t,29.25,.75)),y=lerp(i,ORDER[i],m)*62,s=out(P(t,a,.4));
+      return `<div class="a" style="top:${y}px;left:0;white-space:pre"><span class="o b" style="opacity:${P(t,a,.1)}">${(r[2]*s).toFixed(3)}</span><span class="track" style="width:150px;margin:0 16px"><b style="width:${r[2]/2*100*s}%"></b></span>${esc(r[0])}</div>`}).join('')+`</div>`)+cap(t,26.2,5,'Rank.','Score every line, then sort.'));
+  // 7 guard
+  h+=scene(t,32,36,card(`<span class="soft">$ git diff --cached | tail -1</span>\n<span style="background:#dfe9d6;display:inline-block;padding:0 10px"><span class="gr">+</span>const dbPassword = "Tr0ub4dor&amp;3-prod-2024";</span>\n\n<span class="o">$</span> ${typed('guard',t)}\n`+
+      (t<34?'':`<span style="${rise(t,34,.2,8)}display:inline-block"><b class="o" style="font-size:44px">${(0.98*out(P(t,34,.4))).toFixed(3)}</span></b><span class="track"><b style="width:${98*out(P(t,34,.4))}%"></b></span><span class="soft">likely a secret</span>`))+
+      (t<34.5?'':`<div class="a stamp" style="left:600px;top:640px;opacity:${P(t,34.5,.06)};transform:rotate(-7deg) scale(${lerp(2.4,1,out(P(t,34.5,.18)))})">BLOCKED</div>`)+cap(t,32.2,6,'Guard.','Exit codes for hooks and scripts.'));
+  // 8 paint
+  h+=scene(t,36,42,(()=>{const n=Math.floor(P(t,37,3.5)*1600),s=17;let r='';
+    for(let i=0;i<n;i++)r+=`<rect x="${(i%40)*s}" y="${(i/40|0)*s}" width="${s}" height="${s}" fill="#eb521e" fill-opacity="${cl((HEART[i]-.6)/.25).toFixed(2)}"/>`;
+    if(n<1600)r+=`<rect x="${(n%40)*s}" y="${(n/40|0)*s}" width="${s}" height="${s}" fill="#0f0e0d"/>`;
+    const big=(a,y,txt)=>t<a?'':`<div class="a serif" style="left:960px;top:${y}px;font-size:108px;${rise(t,a,.3)}">${txt}</div>`;
+    return `<div class="a mono" style="left:140px;top:170px;font-size:24px;${rise(t,36.2)}"><span class="o">$</span> subq each "…a heart. Is this pixel black?" -j 24 &lt; pixels.txt</div>`+
+      `<svg class="a" style="left:140px;top:230px;border:3px solid #0f0e0d;background:#f8f6f2;box-shadow:12px 12px 0 #0f0e0d" width="686" height="686" viewBox="0 0 680 680">${r}</svg>`+
+      `<div class="a mono soft" style="left:140px;top:940px;font-size:26px">${n.toLocaleString()} / 1,600 answers</div>`+
+      `<div class="a soft" style="left:964px;top:250px;font-size:40px;width:800px;${rise(t,36.3)}">It cannot draw. So we asked it<br>about every pixel.</div>`+
+      big(37,430,'1,600 questions.')+big(38.25,580,'24 seconds.')+big(39.5,730,'<span class="o">2 cents.</span>')})());
+  // 9 end
+  if(t>=42){const p=out(P(t,42,.5));
+    h+=`<div class="a" style="inset:0">${SQ.map(([cx,cy,c],i)=>`<div class="a" style="left:${lerp(960+(cx-1)*900,870+cx*60,p)}px;top:${lerp(180+(cy-1)*700,150+cy*60,p)}px;width:60px;height:60px;background:${c};opacity:${P(t,42,.15)};transform:rotate(${(1-p)*90}deg)"></div>`).join('')}`+
+      `<div class="a serif" style="left:0;width:1920px;top:370px;text-align:center;font-size:170px;${rise(t,42.2)}">subq-cli</div>`+
+      (t<42.6?'':`<div class="a" style="left:0;width:1920px;top:640px;text-align:center;${rise(t,42.6,.25)}"><span class="pill"><span class="o">$</span> ${typed('npm2',t)}</span></div>`)+
+      `<div class="a mono" style="left:0;width:1920px;top:820px;text-align:center;font-size:36px;${rise(t,43.7)}">github.com/Adityakhalkar/subq-cli</div>`+
+      `<div class="a soft" style="left:0;width:1920px;top:960px;text-align:center;font-size:26px;${rise(t,44.2)}">A community tool for SubQ's Decisions API. Not an official SubQ product.</div></div>`}
+  document.getElementById('s').innerHTML=h;
+}
+document.fonts.ready.then(async()=>{await Promise.all(['400 20px "Libre Baskerville"','italic 400 20px "Libre Baskerville"','500 20px Manrope','400 20px "Roboto Mono"','500 20px "Roboto Mono"','700 20px "Roboto Mono"'].map(f=>document.fonts.load(f)));render(0);window.READY=true});
+</script></body></html>

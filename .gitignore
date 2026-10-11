@@ -3,3 +3,8 @@ node_modules/
 demo/work/
 demo/*.mp4
 demo/*.gif
+demo/launch/*.mp4
+demo/launch/*.wav
+demo/launch/events.json
+demo/setup.sh
+demo/clips/
