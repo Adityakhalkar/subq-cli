@@ -40,7 +40,7 @@ const BENCH=[['Decision RULER @ 256K',99.8,90.7,''],['Decision LCR',74.0,48.0,''
 
 // ---- timeline. 120 bpm: every half second is a beat. D = demo start, E = end card
 const D=20,E=46;
-ev(.2,'flutter',2);ev(2.2,'whoosh');typing('ahab','Does Ahab survive?',3,1);ev(4.5,'big');[6,6.5,7].forEach(x=>ev(x,'pop'));
+ev(.2,'flutter',2);ev(2.2,'whoosh');typing('ahab','Does Ahab survive?',2.9,.9);ev(4,'big');[6,6.5,7].forEach(x=>ev(x,'pop'));
 ev(8,'whoosh');for(let i=0;i<12;i++)ev(9+i*.125,'sq',i);ev(10.75,'pop');
 ev(12,'whoosh');[12.25,13,13.75].forEach(x=>ev(x,'grow'));ev(16,'whoosh');ev(16,'pop');ev(17,'pop');
 ev(18,'whoosh');typing('npm','npm install -g subq-cli',18.75,.75);ev(D,'drop');
@@ -61,10 +61,10 @@ function render(t){
       s+=`<div class="a" style="left:0;width:1920px;top:440px;text-align:center;opacity:${P(t,.3,.25)*(1-P(t,2.1,.25))}"><span class="pill serif" style="font-size:92px;padding:34px 60px">All of <i>Moby-Dick.</i></span></div>`;
       s+=`<div class="a mono b" style="left:80px;top:980px;font-size:30px;background:#f0ede8;padding:8px 18px;opacity:${1-P(t,2.1,.25)}">${Math.round(212814*out(P(t,.2,2))).toLocaleString()} words</div>`;
       if(t>=2.85)s+=`<div class="a" style="left:949px;top:529px;width:22px;height:22px;background:#eb521e;opacity:${P(t,2.85,.1)}"></div>`}
-    if(t>=3){const m=io(P(t,4.4,.5)),fs=lerp(72,34,m);
+    if(t>=2.9){const m=io(P(t,3.9,.5)),fs=lerp(72,34,m);
       s+=`<div class="a mono" style="left:${lerp(560,120,m)}px;top:${lerp(490,150,m)}px;font-size:${fs}px;font-weight:500;color:${m>.5?'#857f74':'#0f0e0d'};white-space:pre">${typed('ahab',t,0)}${m<1?`<span style="display:inline-block;width:${fs*.42}px;height:${fs*1.05}px;background:#eb521e;vertical-align:-${fs*.15}px;margin-left:8px;opacity:${1-m}"></span>`:''}</div>`}
-    if(t>=4.5){s+=`<div class="a serif" style="left:150px;top:150px;font-size:620px;font-style:italic;line-height:1;transform-origin:0 80%;${pop(t,4.5,.35)}">No<span style="display:inline-block;width:96px;height:96px;background:#eb521e;margin-left:26px"></span></div>`;
-      s+=`<div class="a mono" style="left:1240px;top:520px;font-size:44px;${rise(t,4.8)}"><span class="o b">2%</span> yes</div>`;
+    if(t>=4){s+=`<div class="a serif" style="left:150px;top:150px;font-size:620px;font-style:italic;line-height:1;transform-origin:0 80%;${pop(t,4,.35)}">No<span style="display:inline-block;width:96px;height:96px;background:#eb521e;margin-left:26px"></span></div>`;
+      s+=`<div class="a mono" style="left:1240px;top:520px;font-size:44px;${rise(t,4.3)}"><span class="o b">2%</span> yes</div>`;
       [['311,873 tokens',6],['4.9 seconds',6.5],['3 cents',7]].forEach(([x,a],i)=>{if(t>=a)s+=`<div class="a mono b" style="left:${150+i*590}px;top:860px;font-size:62px;${i===2?'color:#eb521e;':''}${rise(t,a,.3)}">${x}</div>`})}
     return s})());
   if(t>=8&&t<E)h+=`<div class="a" style="inset:0;opacity:${P(t,8,.3)}">${logo(80,62,14)}<div class="a mono b" style="left:140px;top:64px;font-size:28px">subq-cli</div><div class="a mono soft" style="right:80px;top:68px;font-size:22px">community CLI for SubQ's Decisions API</div></div>`;
