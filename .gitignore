@@ -11,3 +11,8 @@ demo/clips/
 demo/film/*.mp4
 demo/film/*.wav
 demo/film/events.json
+demo/v3/*.mp4
+demo/v3/*.wav
+demo/v3/events.json
+demo/v3/moby.txt
+demo/v3/music.*

@@ -1,0 +1,124 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Manrope:wght@500;700&family=Roboto+Mono:wght@400;500;700&display=block" rel="stylesheet">
+<style>
+html,body{margin:0;background:#f0ede8}
+#s{position:relative;width:1920px;height:1080px;overflow:hidden;background:#f0ede8;color:#0f0e0d;font-family:Manrope,sans-serif}
+#s *{box-sizing:border-box}
+.a{position:absolute}.serif{font-family:"Libre Baskerville",serif}.mono{font-family:"Roboto Mono",monospace}
+.soft{color:#857f74}.o{color:#eb521e}.gr{color:#3f7d31}.b{font-weight:700}
+.card{position:absolute;left:80px;top:190px;width:1290px;height:720px;background:#f8f6f2;border:3px solid #0f0e0d;box-shadow:12px 12px 0 #0f0e0d}
+.bar{height:44px;border-bottom:3px solid #0f0e0d;display:flex;align-items:center;gap:8px;padding:0 18px;font:500 20px "Roboto Mono"}
+.bar i{width:14px;height:14px;display:block}
+.body{position:absolute;left:38px;top:76px;right:38px;font:400 33px/54px "Roboto Mono";white-space:pre-wrap;word-break:break-word}
+.cur{display:inline-block;width:18px;height:38px;background:#eb521e;vertical-align:-6px;margin-left:2px}
+.track{display:inline-block;width:420px;height:32px;background:#dedad2;vertical-align:-5px;margin:0 18px}
+.track b{display:block;height:100%;background:#eb521e}
+.pill{display:inline-block;background:#0f0e0d;color:#f0ede8;font:500 52px "Roboto Mono";padding:26px 44px}
+.stamp{font:700 120px "Roboto Mono";color:#eb521e;border:12px solid #eb521e;padding:6px 40px;letter-spacing:6px;background:#f8f6f2}
+.lab{font:700 28px "Roboto Mono";letter-spacing:3px;color:#eb521e}
+</style><script src="data.js"></script></head><body><div id="s"></div><script>
+const C={y:'#ffe237',b:'#0834bc',g:'#999489',o:'#eb521e',gr:'#3f7d31'};
+const SQ=[[0,0,C.y],[2,0,C.b],[1,1,C.g],[0,2,C.o],[2,2,C.gr]];
+const cl=(x,a=0,b=1)=>Math.min(b,Math.max(a,x)),P=(t,a,d)=>cl((t-a)/d),lerp=(a,b,x)=>a+(b-a)*x;
+const out=x=>1-(1-x)**3,inn=x=>x**3,io=x=>x<.5?4*x*x*x:1-(-2*x+2)**3/2,back=x=>1+2.70158*(x-1)**3+1.70158*(x-1)**2;
+const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const EV=[],ev=(t,k,v)=>EV.push({t,k,v});
+const TY={};
+function typing(id,text,start,dur){TY[id]={text,start,dur};for(let i=0;i<text.length;i++)if(text[i]!==' ')ev(start+dur*i/text.length,'key')}
+const typed=(id,t,cur=1)=>{const y=TY[id],n=Math.floor(P(t,y.start,y.dur)*y.text.length);return esc(y.text.slice(0,n))+(cur&&t<y.start+y.dur+.35?'<span class="cur"></span>':'')};
+const rise=(t,a,d=.35,dy=40)=>{const p=out(P(t,a,d));return `opacity:${p};transform:translateY(${(1-p)*dy}px);`};
+const pop=(t,a,d=.3)=>`opacity:${P(t,a,.08)};transform:scale(${t<a?0:back(P(t,a,d))});`;
+function logo(x,y,cell,scales){return SQ.map(([cx,cy,c],i)=>`<div class="a" style="left:${x+cx*cell}px;top:${y+cy*cell}px;width:${cell}px;height:${cell}px;background:${c};transform:scale(${scales?scales[i]:1})"></div>`).join('')}
+const scene=(t,a,b,html)=>t<a||t>=b?'':`<div class="a" style="inset:0;opacity:${Math.min(P(t,a,.2),1-P(t,b-.2,.2))};transform:translateY(${(1-out(P(t,a,.3)))*30-out(P(t,b-.25,.25))*30}px)">${html}</div>`;
+const card=(inner,title='subq')=>`<div class="card"><div class="bar">${SQ.map(q=>`<i style="background:${q[2]}"></i>`).join('')}<span style="margin-left:10px">${title}</span></div><div class="body">${inner}</div></div>`;
+const cap=(t,a,n,word,sub)=>t<a?'':`<div class="a" style="left:1440px;top:330px;width:440px;${rise(t,a)}"><div class="mono o" style="font-size:28px;font-weight:700">0${n} / 06</div><div class="serif" style="font-size:104px;line-height:1.25">${word}</div><div class="soft" style="font-size:34px;line-height:1.35;margin-top:14px">${sub}</div></div>`;
+const row=(t,a,label,p,w)=>t<a?'':`<span style="${rise(t,a,.25,10)}display:inline-block">  ${label.padEnd(w)}<span class="track"><b style="width:${out(P(t,a,.5))*p}%"></b></span>${String(Math.round(out(P(t,a,.5))*p)).padStart(3)}%</span>\n`;
+const head=(t,a,txt)=>t<a?'':`<span style="${rise(t,a,.2,8)}display:inline-block"><span class="o">■</span> ${txt}</span>\n`;
+const REV=[['The app crashes every time I open settings',1,1.717],['Love the new dark mode, great work',0,.035],['I was charged twice this month, refund me now',1,1.838],['How do I export my data to CSV?',0,.158],['Worst support I have ever dealt with',1,.307],['Thanks, that fixed it!',0,.053]];
+const ORDER=REV.map(r=>REV.filter(q=>q[2]>r[2]).length);
+const BENCH=[['Decision RULER @ 256K',99.8,90.7,''],['Decision LCR',74.0,48.0,''],['Decision Index',67.6,61.6,'leads 13 of 16 tasks']];
+
+// ---- timeline. 120 bpm: every half second is a beat. D = demo start, H = heart, E = end card
+const D=20,H=46,E=52;
+ev(.2,'flutter',2);ev(2.2,'whoosh');typing('ahab','Does Ahab survive?',3,1);ev(4.5,'big');[6,6.5,7].forEach(x=>ev(x,'pop'));
+ev(8,'whoosh');for(let i=0;i<12;i++)ev(9+i*.125,'sq',i);ev(10.75,'pop');
+ev(12,'whoosh');[12.25,13,13.75].forEach(x=>ev(x,'grow'));ev(16,'whoosh');ev(16,'pop');ev(17,'pop');
+ev(18,'whoosh');typing('npm','npm install -g subq-cli',18.75,.75);ev(D,'drop');
+typing('q1','Is this spam? | You won a free cruise, click here to claim',D+.5,1);ev(D+2,'pop');
+typing('q2','Which team owns this? [billing, tech, sales] | I was charged twice',D+3,1);ev(D+4.5,'pop');
+typing('q3','How urgent is this? [low < medium < high] | The server is down for everyone',D+6,1);ev(D+7.5,'pop');
+ev(D+10,'whoosh');typing('filter','subq filter "Is this a complaint?" < reviews.txt',D+10.25,1.25);REV.forEach((r,i)=>ev(D+12+i*.3,r[1]?'yes':'no'));
+ev(D+16,'whoosh');typing('each','subq each "How urgent?" --score low,medium,high < reviews.txt | sort -rn',D+16.25,1.25);REV.forEach((r,i)=>ev(D+18+i*.15,'tick'));ev(D+19.25,'swish');
+ev(D+22,'whoosh');typing('guard','git diff --cached | subq ask -t 0.5 "Does this add a secret?" && echo BLOCKED',D+22.25,1.25);ev(D+24,'pop');ev(D+24.5,'thump');
+ev(H,'break');ev(H+1,'roll',3.5);[H+1,H+2.25,H+3.5].forEach(x=>ev(x,'pop'));
+ev(E,'final');typing('i1','npm install -g subq-cli',E+.75,.75);typing('i2','subq login',E+2,.4);typing('i3','subq',E+2.9,.2);[E+1.5,E+2.4,E+3.1].forEach(x=>ev(x,'pop'));
+
+function render(t){
+  let h='';
+  // 1 hook: a whole book, one question
+  h+=scene(t,0,8,(()=>{let s='';
+    if(t<3.1){const k=lerp(1,.012,io(P(t,2.2,.8)));
+      s+=`<div class="a mono" style="left:80px;top:${60-70*t-1500*io(P(t,.2,2.1))}px;width:1760px;font-size:22px;line-height:31px;color:#57534a;opacity:${1-P(t,2.75,.25)};transform-origin:880px ${480+70*t+1500*io(P(t,.2,2.1))}px;transform:scale(${k})">${esc(MOBY)}</div>`;
+      s+=`<div class="a" style="left:0;width:1920px;top:440px;text-align:center;opacity:${P(t,.3,.25)*(1-P(t,2.1,.25))}"><span class="pill serif" style="font-size:92px;padding:34px 60px">All of <i>Moby-Dick.</i></span></div>`;
+      s+=`<div class="a mono b" style="left:80px;top:980px;font-size:30px;background:#f0ede8;padding:8px 18px;opacity:${1-P(t,2.1,.25)}">${Math.round(212814*out(P(t,.2,2))).toLocaleString()} words</div>`;
+      if(t>=2.85)s+=`<div class="a" style="left:949px;top:529px;width:22px;height:22px;background:#eb521e;opacity:${P(t,2.85,.1)}"></div>`}
+    if(t>=3){const m=io(P(t,4.4,.5)),fs=lerp(72,34,m);
+      s+=`<div class="a mono" style="left:${lerp(560,120,m)}px;top:${lerp(490,150,m)}px;font-size:${fs}px;font-weight:500;color:${m>.5?'#857f74':'#0f0e0d'};white-space:pre">${typed('ahab',t,0)}${m<1?`<span style="display:inline-block;width:${fs*.42}px;height:${fs*1.05}px;background:#eb521e;vertical-align:-${fs*.15}px;margin-left:8px;opacity:${1-m}"></span>`:''}</div>`}
+    if(t>=4.5){s+=`<div class="a serif" style="left:150px;top:150px;font-size:620px;font-style:italic;line-height:1;transform-origin:0 80%;${pop(t,4.5,.35)}">No<span style="display:inline-block;width:96px;height:96px;background:#eb521e;margin-left:26px"></span></div>`;
+      s+=`<div class="a mono" style="left:1240px;top:520px;font-size:44px;${rise(t,4.8)}"><span class="o b">2%</span> yes</div>`;
+      [['311,873 tokens',6],['4.9 seconds',6.5],['3 cents',7]].forEach(([x,a],i)=>{if(t>=a)s+=`<div class="a mono b" style="left:${150+i*590}px;top:860px;font-size:62px;${i===2?'color:#eb521e;':''}${rise(t,a,.3)}">${x}</div>`})}
+    return s})());
+  if(t>=8&&t<E)h+=`<div class="a" style="inset:0;opacity:${P(t,8,.3)}">${logo(80,62,14)}<div class="a mono b" style="left:140px;top:64px;font-size:28px">subq-cli</div><div class="a mono soft" style="right:80px;top:68px;font-size:22px">community CLI for SubQ's Decisions API</div></div>`;
+  // 2 story: why SubQ Snap
+  h+=scene(t,8,12,`<div class="a serif" style="left:150px;top:170px;font-size:96px;${rise(t,8)}">This is SubQ Snap.</div>`+
+    `<div class="a" style="left:150px;top:400px;${rise(t,8.4)}"><div class="mono soft" style="font-size:30px;margin-bottom:14px">Jev · 32K tokens</div><div style="width:92px;height:92px;background:#999489"></div></div>`+
+    `<div class="a" style="left:150px;top:600px;opacity:${P(t,8.9,.1)}"><div class="mono b" style="font-size:30px;margin-bottom:14px">Snap · 384K tokens</div><div style="display:flex;gap:14px">${Array.from({length:12},(_,i)=>`<div style="width:92px;height:92px;background:#eb521e;${pop(t,9+i*.125,.25)}"></div>`).join('')}</div></div>`+
+    (t<10.75?'':`<div class="a serif o" style="left:1500px;top:520px;font-size:230px;font-style:italic;${pop(t,10.75)}">12×</div>`)+
+    `<div class="a soft" style="left:150px;top:850px;font-size:38px;${rise(t,11)}">Text and images in one call: code, documents, screenshots, logs.</div>`);
+  h+=scene(t,12,16,`<div class="a lab" style="left:150px;top:180px;${rise(t,12)}">SUBQ'S PUBLISHED BENCHMARKS · SNAP VS JEV</div>`+BENCH.map((b,i)=>{const a=12.25+i*.75,g=out(P(t,a,.6)),y=270+i*210;
+      return t<a?'':`<div class="a" style="left:150px;top:${y}px;${rise(t,a,.3,20)}"><div class="serif" style="font-size:46px;margin-bottom:12px">${b[0]} <span class="soft" style="font-family:Manrope;font-size:30px;margin-left:16px">${b[3]}</span></div>`+
+        [[b[1],'#eb521e','Snap'],[b[2],'#999489','Jev']].map(([v,c,n])=>`<div style="display:flex;align-items:center;height:48px;margin-top:6px"><div class="mono" style="width:90px;font-size:26px">${n}</div><div style="height:38px;width:${v*12*g}px;background:${c}"></div><div class="mono b" style="font-size:34px;margin-left:18px">${(v*g).toFixed(1)}</div></div>`).join('')+`</div>`}).join('')+
+    `<div class="a soft" style="left:150px;top:960px;font-size:22px;${rise(t,14.2)}">RULER and LCR comparisons use a chunked long-context workflow for Jev. Numbers from SubQ.</div>`);
+  h+=scene(t,16,18,`<div class="a" style="left:150px;top:300px;${rise(t,16)}"><div class="lab">PER MILLION TOKENS</div><div class="mono b" style="font-size:230px;line-height:1.15">$0.09</div></div>`+
+    (t<17?'':`<div class="a" style="left:150px;top:650px;${rise(t,17)}"><div class="lab">SO A YES/NO QUESTION COSTS ABOUT</div><div class="mono b o" style="font-size:150px;line-height:1.15">$0.000009</div></div>`));
+  h+=scene(t,18,20,`<div class="a serif" style="left:0;width:1920px;top:340px;text-align:center;font-size:120px;${rise(t,18)}">So we built it a terminal.</div>`+
+    (t<18.6?'':`<div class="a" style="left:0;width:1920px;top:600px;text-align:center;${rise(t,18.6,.25)}"><span class="pill"><span class="o">$</span> ${typed('npm',t)}</span></div>`));
+  // 3 demo
+  const u=t-D;
+  h+=scene(t,D,D+10,(()=>{
+    const banner=`<span style="display:inline-block;position:relative;width:70px;height:92px;vertical-align:top">${logo(0,8,24)}</span><span style="display:inline-block;vertical-align:top;line-height:44px;margin-left:22px"><b>SubQ</b> <span class="soft">community CLI v0.5.0\nmodel: subq-snap-preview</span></span>\n\n`;
+    let b='';
+    if(u<3)b=`<span class="o">&gt;</span> ${typed('q1',t)}\n`+head(t,D+2,`<b>Yes</b><span class="track"><b style="width:${out(P(u,2,.5))*98}%"></b></span>${Math.round(out(P(u,2,.5))*98)}% yes`);
+    else if(u<6)b=`<span class="o">&gt;</span> ${typed('q2',t)}\n`+head(t,D+4.5,'<b>billing</b>')+row(t,D+4.55,'billing',97,7)+row(t,D+4.65,'tech',1,7)+row(t,D+4.75,'sales',1,7);
+    else b=`<span class="o">&gt;</span> ${typed('q3',t)}\n`+head(t,D+7.5,'<b>high</b>  <span class="soft">1.857 on a 0 to 2 scale</span>')+row(t,D+7.55,'low',4,6)+row(t,D+7.65,'medium',6,6)+row(t,D+7.75,'high',90,6);
+    return card(banner+b)+(u<3?cap(t,D+.3,1,'Ask.','Yes or no, with a probability.'):u<6?cap(t,D+3,2,'Choose.','One of your own options.'):cap(t,D+6,3,'Rate.','On a scale you define.'))})());
+  h+=scene(t,D+10,D+16,card(`<span class="o">$</span> ${typed('filter',t)}\n\n`+REV.map((r,i)=>{const j=P(u,12+i*.3,.25);
+      return `<span style="display:inline-block;opacity:${r[1]?lerp(.55,1,j):lerp(.55,.25,j)};${r[1]&&j?'font-weight:500;':''}${!r[1]&&j?'text-decoration:line-through;':''}"><span class="o" style="opacity:${r[1]?j:0}">■</span> ${esc(r[0])}</span>\n`}).join('')+
+      (u<14.2?'':`\n<span class="soft" style="${rise(u,14.2,.25,8)}display:inline-block">6 judged, 3 kept, 553 tokens</span>`),'reviews.txt')+cap(t,D+10.2,4,'Filter.','grep, but for meaning.'));
+  h+=scene(t,D+16,D+22,card(`<span class="o">$</span> ${typed('each',t)}\n`+`<div style="position:relative;height:380px;margin-top:34px;font-size:29px">`+REV.map((r,i)=>{const a=18+i*.15,y=lerp(i,ORDER[i],io(P(u,19.25,.75)))*62,s=out(P(u,a,.4));
+      return `<div class="a" style="top:${y}px;left:0;white-space:pre"><span class="o b" style="opacity:${P(u,a,.1)}">${(r[2]*s).toFixed(3)}</span><span class="track" style="width:150px;margin:0 16px"><b style="width:${r[2]/2*100*s}%"></b></span>${esc(r[0])}</div>`}).join('')+`</div>`)+cap(t,D+16.2,5,'Rank.','Score every line, then sort.'));
+  h+=scene(t,D+22,H,card(`<span class="soft">$ git diff --cached | tail -1</span>\n<span style="background:#dfe9d6;display:inline-block;padding:0 10px"><span class="gr">+</span>const dbPassword = "Tr0ub4dor&amp;3-prod-2024";</span>\n\n<span class="o">$</span> ${typed('guard',t)}\n`+
+      (u<24?'':`<span style="${rise(u,24,.2,8)}display:inline-block"><b class="o" style="font-size:44px">${(0.98*out(P(u,24,.4))).toFixed(3)}</b><span class="track"><b style="width:${98*out(P(u,24,.4))}%"></b></span><span class="soft">likely a secret</span></span>`))+
+      (u<24.5?'':`<div class="a stamp" style="left:600px;top:640px;opacity:${P(u,24.5,.06)};transform:rotate(-7deg) scale(${lerp(2.4,1,out(P(u,24.5,.18)))})">BLOCKED</div>`)+cap(t,D+22.2,6,'Guard.','Exit codes for hooks and scripts.'));
+  // heart
+  h+=scene(t,H,E,(()=>{const v=t-H,n=Math.floor(P(v,1,3.5)*1600),s=17;let r='';
+    for(let i=0;i<n;i++)r+=`<rect x="${(i%40)*s}" y="${(i/40|0)*s}" width="${s}" height="${s}" fill="#eb521e" fill-opacity="${cl((HEART[i]-.6)/.25).toFixed(2)}"/>`;
+    if(n<1600)r+=`<rect x="${(n%40)*s}" y="${(n/40|0)*s}" width="${s}" height="${s}" fill="#0f0e0d"/>`;
+    const big=(a,y,txt)=>v<a?'':`<div class="a serif" style="left:960px;top:${y}px;font-size:108px;${rise(v,a,.3)}">${txt}</div>`;
+    return `<div class="a mono" style="left:140px;top:170px;font-size:24px;${rise(v,.2)}"><span class="o">$</span> subq each "…a heart. Is this pixel black?" -j 24 &lt; pixels.txt</div>`+
+      `<svg class="a" style="left:140px;top:230px;border:3px solid #0f0e0d;background:#f8f6f2;box-shadow:12px 12px 0 #0f0e0d" width="686" height="686" viewBox="0 0 680 680">${r}</svg>`+
+      `<div class="a mono soft" style="left:140px;top:940px;font-size:26px">${n.toLocaleString()} / 1,600 answers</div>`+
+      `<div class="a soft" style="left:964px;top:250px;font-size:40px;width:800px;${rise(v,.3)}">It cannot draw. So we asked it<br>about every pixel.</div>`+
+      big(1,430,'1,600 questions.')+big(2.25,580,'24 seconds.')+big(3.5,730,'<span class="o">2 cents.</span>')})());
+  // install
+  if(t>=E){const p=out(P(t,E,.5)),line=(id,a)=>t<a?'':`<div style="${rise(t,a,.2,10)}"><span class="o">$</span> ${typed(id,t)}</div>`;
+    h+=`<div class="a" style="inset:0">${SQ.map(([cx,cy,c],i)=>`<div class="a" style="left:${lerp(400+(cx-1)*900,250+cx*70,p)}px;top:${lerp(380+(cy-1)*700,300+cy*70,p)}px;width:70px;height:70px;background:${c};opacity:${P(t,E,.15)};transform:rotate(${(1-p)*90}deg)"></div>`).join('')}`+
+      `<div class="a serif" style="left:250px;top:560px;font-size:150px;${rise(t,E+.2)}">subq-cli</div>`+
+      `<div class="a soft" style="left:256px;top:770px;font-size:34px;${rise(t,E+.5)}">github.com/Adityakhalkar/subq-cli</div>`+
+      `<div class="a mono" style="left:960px;top:300px;width:840px;background:#0f0e0d;color:#f0ede8;font-size:42px;font-weight:500;line-height:92px;padding:40px 50px;height:356px;white-space:nowrap;${rise(t,E+.5,.3)}">${line('i1',E+.7)}${line('i2',E+1.95)}${line('i3',E+2.85)}</div>`+
+      `<div class="a soft" style="left:962px;top:690px;font-size:32px;${rise(t,E+3.4)}">Paste your SubQ API key once. Then ask.</div>`+
+      `<div class="a soft" style="left:0;width:1920px;top:990px;text-align:center;font-size:24px;${rise(t,E+3.8)}">A community tool for SubQ's Decisions API. Not an official SubQ product.</div></div>`}
+  document.getElementById('s').innerHTML=h;
+}
+document.fonts.ready.then(async()=>{await Promise.all(['400 20px "Libre Baskerville"','italic 400 20px "Libre Baskerville"','500 20px Manrope','400 20px "Roboto Mono"','500 20px "Roboto Mono"','700 20px "Roboto Mono"'].map(f=>document.fonts.load(f)));render(0);window.READY=true});
+</script></body></html>
