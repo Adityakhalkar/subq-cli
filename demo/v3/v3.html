@@ -38,8 +38,8 @@ const REV=[['The app crashes every time I open settings',1,1.717],['Love the new
 const ORDER=REV.map(r=>REV.filter(q=>q[2]>r[2]).length);
 const BENCH=[['Decision RULER @ 256K',99.8,90.7,''],['Decision LCR',74.0,48.0,''],['Decision Index',67.6,61.6,'leads 13 of 16 tasks']];
 
-// ---- timeline. 120 bpm: every half second is a beat. D = demo start, H = heart, E = end card
-const D=20,H=46,E=52;
+// ---- timeline. 120 bpm: every half second is a beat. D = demo start, E = end card
+const D=20,E=46;
 ev(.2,'flutter',2);ev(2.2,'whoosh');typing('ahab','Does Ahab survive?',3,1);ev(4.5,'big');[6,6.5,7].forEach(x=>ev(x,'pop'));
 ev(8,'whoosh');for(let i=0;i<12;i++)ev(9+i*.125,'sq',i);ev(10.75,'pop');
 ev(12,'whoosh');[12.25,13,13.75].forEach(x=>ev(x,'grow'));ev(16,'whoosh');ev(16,'pop');ev(17,'pop');
@@ -50,7 +50,6 @@ typing('q3','How urgent is this? [low < medium < high] | The server is down for 
 ev(D+10,'whoosh');typing('filter','subq filter "Is this a complaint?" < reviews.txt',D+10.25,1.25);REV.forEach((r,i)=>ev(D+12+i*.3,r[1]?'yes':'no'));
 ev(D+16,'whoosh');typing('each','subq each "How urgent?" --score low,medium,high < reviews.txt | sort -rn',D+16.25,1.25);REV.forEach((r,i)=>ev(D+18+i*.15,'tick'));ev(D+19.25,'swish');
 ev(D+22,'whoosh');typing('guard','git diff --cached | subq ask -t 0.5 "Does this add a secret?" && echo BLOCKED',D+22.25,1.25);ev(D+24,'pop');ev(D+24.5,'thump');
-ev(H,'break');ev(H+1,'roll',3.5);[H+1,H+2.25,H+3.5].forEach(x=>ev(x,'pop'));
 ev(E,'final');typing('i1','npm install -g subq-cli',E+.75,.75);typing('i2','subq login',E+2,.4);typing('i3','subq',E+2.9,.2);[E+1.5,E+2.4,E+3.1].forEach(x=>ev(x,'pop'));
 
 function render(t){
@@ -97,19 +96,9 @@ function render(t){
       (u<14.2?'':`\n<span class="soft" style="${rise(u,14.2,.25,8)}display:inline-block">6 judged, 3 kept, 553 tokens</span>`),'reviews.txt')+cap(t,D+10.2,4,'Filter.','grep, but for meaning.'));
   h+=scene(t,D+16,D+22,card(`<span class="o">$</span> ${typed('each',t)}\n`+`<div style="position:relative;height:380px;margin-top:34px;font-size:29px">`+REV.map((r,i)=>{const a=18+i*.15,y=lerp(i,ORDER[i],io(P(u,19.25,.75)))*62,s=out(P(u,a,.4));
       return `<div class="a" style="top:${y}px;left:0;white-space:pre"><span class="o b" style="opacity:${P(u,a,.1)}">${(r[2]*s).toFixed(3)}</span><span class="track" style="width:150px;margin:0 16px"><b style="width:${r[2]/2*100*s}%"></b></span>${esc(r[0])}</div>`}).join('')+`</div>`)+cap(t,D+16.2,5,'Rank.','Score every line, then sort.'));
-  h+=scene(t,D+22,H,card(`<span class="soft">$ git diff --cached | tail -1</span>\n<span style="background:#dfe9d6;display:inline-block;padding:0 10px"><span class="gr">+</span>const dbPassword = "Tr0ub4dor&amp;3-prod-2024";</span>\n\n<span class="o">$</span> ${typed('guard',t)}\n`+
+  h+=scene(t,D+22,E,card(`<span class="soft">$ git diff --cached | tail -1</span>\n<span style="background:#dfe9d6;display:inline-block;padding:0 10px"><span class="gr">+</span>const dbPassword = "Tr0ub4dor&amp;3-prod-2024";</span>\n\n<span class="o">$</span> ${typed('guard',t)}\n`+
       (u<24?'':`<span style="${rise(u,24,.2,8)}display:inline-block"><b class="o" style="font-size:44px">${(0.98*out(P(u,24,.4))).toFixed(3)}</b><span class="track"><b style="width:${98*out(P(u,24,.4))}%"></b></span><span class="soft">likely a secret</span></span>`))+
       (u<24.5?'':`<div class="a stamp" style="left:600px;top:640px;opacity:${P(u,24.5,.06)};transform:rotate(-7deg) scale(${lerp(2.4,1,out(P(u,24.5,.18)))})">BLOCKED</div>`)+cap(t,D+22.2,6,'Guard.','Exit codes for hooks and scripts.'));
-  // heart
-  h+=scene(t,H,E,(()=>{const v=t-H,n=Math.floor(P(v,1,3.5)*1600),s=17;let r='';
-    for(let i=0;i<n;i++)r+=`<rect x="${(i%40)*s}" y="${(i/40|0)*s}" width="${s}" height="${s}" fill="#eb521e" fill-opacity="${cl((HEART[i]-.6)/.25).toFixed(2)}"/>`;
-    if(n<1600)r+=`<rect x="${(n%40)*s}" y="${(n/40|0)*s}" width="${s}" height="${s}" fill="#0f0e0d"/>`;
-    const big=(a,y,txt)=>v<a?'':`<div class="a serif" style="left:960px;top:${y}px;font-size:108px;${rise(v,a,.3)}">${txt}</div>`;
-    return `<div class="a mono" style="left:140px;top:170px;font-size:24px;${rise(v,.2)}"><span class="o">$</span> subq each "…a heart. Is this pixel black?" -j 24 &lt; pixels.txt</div>`+
-      `<svg class="a" style="left:140px;top:230px;border:3px solid #0f0e0d;background:#f8f6f2;box-shadow:12px 12px 0 #0f0e0d" width="686" height="686" viewBox="0 0 680 680">${r}</svg>`+
-      `<div class="a mono soft" style="left:140px;top:940px;font-size:26px">${n.toLocaleString()} / 1,600 answers</div>`+
-      `<div class="a soft" style="left:964px;top:250px;font-size:40px;width:800px;${rise(v,.3)}">It cannot draw. So we asked it<br>about every pixel.</div>`+
-      big(1,430,'1,600 questions.')+big(2.25,580,'24 seconds.')+big(3.5,730,'<span class="o">2 cents.</span>')})());
   // install
   if(t>=E){const p=out(P(t,E,.5)),line=(id,a)=>t<a?'':`<div style="${rise(t,a,.2,10)}"><span class="o">$</span> ${typed(id,t)}</div>`;
     h+=`<div class="a" style="inset:0">${SQ.map(([cx,cy,c],i)=>`<div class="a" style="left:${lerp(400+(cx-1)*900,250+cx*70,p)}px;top:${lerp(380+(cy-1)*700,300+cy*70,p)}px;width:70px;height:70px;background:${c};opacity:${P(t,E,.15)};transform:rotate(${(1-p)*90}deg)"></div>`).join('')}`+
