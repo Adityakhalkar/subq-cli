@@ -1,6 +1,6 @@
 {
   "name": "subq-cli",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Unofficial command-line client for the SubQ API: log in once, then ask and chat from your terminal",
   "type": "module",
   "bin": {

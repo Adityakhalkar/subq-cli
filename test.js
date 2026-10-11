@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 const BIN = fileURLToPath(new URL("./bin/subq.js", import.meta.url));
 const tmp = mkdtempSync(join(tmpdir(), "subq-test-"));
 let server, base, last;
+let flaked = 0;
 
 const ANSWERS = {
   noul: { type: "noul", noul: 0.92 },
@@ -27,6 +28,9 @@ before(async () => {
     if (req.headers.authorization !== "Bearer sk-good")
       return json(401, { detail: { error_type: "authentication_error", message: "Invalid API key" } });
     if (req.url === "/v1/models") return json(200, { object: "list", data: [{ id: "subq-preview", name: "SubQ Preview" }] });
+    if (req.url === "/v1/systemone" && last.body.state === "flaky" && !flaked++) return json(429, { detail: { error_type: "rate_limit", message: "Slow down" } });
+    if (req.url === "/v1/systemone" && last.body.questions.answer.type === "noul")
+      return json(200, { answers: { answer: { type: "noul", noul: /ham/.test(last.body.state) ? 0.08 : 0.92 } }, usage: { input_tokens: 10, output_tokens: 2 } });
     if (req.url === "/v1/systemone")
       return json(200, { answers: { answer: ANSWERS[last.body.questions.answer.type] }, usage: { input_tokens: 10, output_tokens: 2 } });
     if (req.url === "/v1/chat/completions") {
@@ -97,6 +101,39 @@ test("ask: missing state fails without calling the API", async () => {
   assert.equal(r.code, 1);
   assert.match(r.stderr, /Missing state/);
   assert.equal(last, null);
+});
+
+test("ask: --threshold sets the exit code, and a 429 is retried", async () => {
+  assert.equal((await run(["ask", "Spam?", "free cruise", "-t", "0.5"])).code, 0);
+  const no = await run(["ask", "Spam?", "ham sandwich", "-t", "0.5"]);
+  assert.equal(no.stdout, "0.08\n");
+  assert.equal(no.code, 1);
+  const retried = await run(["ask", "Spam?", "flaky"]);
+  assert.equal(retried.stdout, "0.92\n");
+});
+
+test("filter and each: judge every stdin line and keep input order", async () => {
+  const input = "free cruise\nham sandwich\n\nwin cash\n";
+  const kept = await run(["filter", "Spam?"], { input });
+  assert.equal(kept.stdout, "free cruise\nwin cash\n");
+  assert.match(kept.stderr, /3 judged, 2 kept, 36 tokens/);
+  assert.equal((await run(["filter", "Spam?", "-v", "-j", "1"], { input })).stdout, "ham sandwich\n");
+  const none = await run(["filter", "Spam?", "-t", "0.99"], { input });
+  assert.equal(none.stdout, "");
+  assert.equal(none.code, 1);
+  assert.equal((await run(["each", "Spam?"], { input })).stdout, "0.92\tfree cruise\n0.08\tham sandwich\n0.92\twin cash\n");
+  assert.equal((await run(["each", "Team?", "--choice", "billing,tech"], { input: "app crashes" })).stdout, "tech\tapp crashes\n");
+});
+
+test("filter --files: judges file text and sends images", async () => {
+  const note = join(tmp, "note.txt");
+  const pic = join(tmp, "pic.webp");
+  writeFileSync(note, "ham sandwich");
+  writeFileSync(pic, "fake");
+  const r = await run(["filter", "Spam?", "-f", "-j", "1"], { input: `${note}\n${pic}\n` });
+  assert.equal(r.stdout, `${pic}\n`);
+  assert.equal(last.body.images[0].mediaType, "image/webp");
+  assert.match((await run(["filter", "Spam?", "-f"], { input: "nope.txt" })).stderr, /nope\.txt: ENOENT/);
 });
 
 test("chat: streams deltas and appends piped stdin to the prompt", async () => {

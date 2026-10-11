@@ -1,6 +1,8 @@
 # subq-cli
 
-A command-line client for the [SubQ API](https://docs.subq.ai). Paste your API key once, then ask and chat from your terminal.
+A command-line client for the [SubQ API](https://docs.subq.ai). Paste your API key once, then get yes/no, multiple-choice and scale judgments from your terminal: one at a time, or over thousands of lines.
+
+It is built around `subq-snap-preview`, the model every key has. Chat with `subq-preview` works too, but SubQ offers that model to enterprise accounts only.
 
 Unofficial: this is a community tool, not made by or affiliated with SubQ.
 
@@ -29,26 +31,37 @@ subq login
 Run `subq` with no arguments to open a session in your terminal. The first time, it asks for your API key. If you use Claude Code, the keys and commands will feel familiar.
 
 ```
-╭──────────────────────────────────────────────────────────────────╮
-│ ✻ subq v0.3.0                                                    │
-│                                                                  │
-│ / commands · @ files · ! shell · Esc to interrupt                │
-│ model: subq-snap-preview                                         │
-│ Ask a yes/no question. Add `| text` or @file to judge something. │
-│ cwd: ~/projects/app                                              │
-╰──────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ ✻ subq v0.4.0                                                                │
+│                                                                              │
+│ / commands · @ files · ! shell · Esc to interrupt                            │
+│ model: subq-snap-preview                                                     │
+│ Ask a yes/no question. Add `| text` or @file to judge something.             │
+│ Or give options: Which team? [billing, tech]  How urgent? [low < mid < high] │
+│ cwd: ~/projects/app                                                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
 
 > Is this spam? | You won a free cruise, click here to claim
-● Yes  ████████████████████ 98% yes
-  ⎿ 93 in, 0 out, 93 tokens this session
+● Yes  ████████████████████  98% yes
+
+> Which team owns this? [billing, tech, sales] | I was charged twice
+● billing
+  billing  ███████████████████░  97%
+  tech     ░░░░░░░░░░░░░░░░░░░░   1%
+  sales    ░░░░░░░░░░░░░░░░░░░░   1%
+
+> How urgent is this? [low < medium < high] | The server is down for all customers
+● high  1.946 on a 0 to 2 scale
+  low     ░░░░░░░░░░░░░░░░░░░░   2%
+  medium  ░░░░░░░░░░░░░░░░░░░░   2%
+  high    ███████████████████░  96%
 ```
 
-It picks the mode from what your key can use:
+End a question with `[a, b, c]` to pick one option, or `[low < mid < high]` to rate on a scale. Put the text to judge after a `|`, attach it with `@file`, or leave it out and the model answers from general knowledge.
 
-- **`subq-snap-preview`** (the usual case in the public preview): you ask yes/no questions and get a probability back. Put the text to judge after a `|`, attach it with `@file`, or leave it out and the model answers from general knowledge.
-- **`subq-preview`**: a streaming chat that keeps its history.
+With an enterprise key that has `subq-preview`, the session opens as a streaming chat.
 
-`/model` opens a picker that also shows models your key does not have yet.
+`/model` opens a picker that also shows models your key does not have.
 
 | Type | What it does |
 | --- | --- |
@@ -99,13 +112,51 @@ subq ask "Is the screen cracked?" "Customer photo" -i phone.jpg
 
 Only the answer is printed to stdout, so it drops straight into scripts:
 
-```sh
-if (( $(subq ask "Is this spam?" "$msg") > 0.8 )); then echo "spam"; fi
-```
-
 Probabilities, confidence and token usage go to stderr. Use `--json` for the full API response.
 
-## Chat: `subq-preview`
+For yes/no questions, `-t` turns the answer into an exit code: 0 if the probability is at least the threshold, 1 if not.
+
+```sh
+# .git/hooks/pre-commit
+if git diff --cached | subq ask -t 0.5 "Does this diff add a password, token or API key?" > /dev/null; then
+  echo "This commit may contain a secret."; exit 1
+fi
+```
+
+## Filter and each: one question over many lines
+
+`subq filter` works like `grep`, but matches on meaning. It reads lines from stdin and prints the ones the answer is yes for.
+
+```sh
+subq filter "Is this a complaint?" < reviews.txt
+# The app crashes every time I open settings
+# I was charged twice this month, refund me now
+
+subq filter -v "Is this a complaint?" < reviews.txt      # the rest
+subq filter -t 0.9 "Is this a complaint?" < reviews.txt  # only when 90% sure
+```
+
+With `-f`, each line is a path and the file is judged: its text, or the picture if it is an image.
+
+```sh
+ls photos/*.jpg | subq filter -f "Is there a person in this photo?"
+git ls-files '*.md' | subq filter -f "Does this document mention pricing?"
+```
+
+`subq each` prints the answer and the line, separated by a tab, so `sort`, `cut` and `awk` can take it from there.
+
+```sh
+subq each "How urgent is this?" --score low,medium,high < tickets.txt | sort -rn | head
+# 1.838	I was charged twice this month, refund me now
+# 1.717	The app crashes every time I open settings
+
+subq each "Which team owns this?" --choice billing,tech,sales < tickets.txt
+# billing	I was charged twice this month, refund me now
+```
+
+Each line is one request of about 100 tokens, so 10,000 short lines cost under 10 cents at $0.09 per million tokens. Eight requests run at once (`-j` changes that), output stays in input order, and rate limits are retried. `filter` exits 1 when nothing matched.
+
+## Chat: `subq-preview` (enterprise keys)
 
 ```sh
 subq chat "Explain server-sent events in two sentences"

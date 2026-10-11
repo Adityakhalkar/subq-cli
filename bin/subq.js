@@ -18,29 +18,34 @@ const HELP = `subq ${version} - unofficial CLI for the SubQ API
 Usage:
   subq                               Open an interactive session
   subq login                         Save your API key (get one at https://console.subq.ai)
-  subq logout                        Delete the saved key
+  subq ask <question> [state]        One judgment about a piece of text
+  subq filter <question>             Keep the stdin lines the answer is yes for
+  subq each <question>               Judge every stdin line: prints answer<TAB>line
   subq models                        List models your key can use
-  subq ask <question> [state]        Ask subq-snap-preview for a judgment
-  subq chat [prompt]                 One-off chat with subq-preview
-  subq -p <prompt>                   One-off answer from whichever model your key has
+  subq logout                        Delete the saved key
 
-ask options:
+Question types (ask, each):
   (default)                 yes/no: prints the probability of yes, 0 to 1
   --yes <text>              describe what counts as yes
   --no <text>               describe what counts as no
   --choice <a,b=desc,c>     pick one option: prints the chosen label
   --score <low,mid,high>    2-10 ordered levels: prints a weighted score
+
+ask options:
   -i, --image <path>        attach a PNG, JPEG or WebP (repeat for up to 4)
+  -t, --threshold <p>       yes/no only: exit 0 if the probability is at least p, else 1
   The state is the text being judged: second argument, or piped on stdin.
 
-chat options:
-  -s, --system <text>       system prompt
-  -e, --effort <level>      reasoning effort, e.g. none, medium, high
-  Piped stdin is appended to the prompt.
+filter and each options:
+  -f, --files               each line is a path: judge that file's text, or the image
+  -t, --threshold <p>       filter: keep lines at or above p (default 0.5)
+  -v, --invert              filter: keep the lines that do not match
+  -j, --jobs <n>            requests in flight at once (default 8)
+  filter exits 1 when nothing matched, like grep.
 
 Common options:
   -m, --model <id>          override the model
-  --json                    print the raw API response
+  --json                    print the raw API response (ask, models)
 
 Environment:
   SUBQ_API_KEY              overrides the saved key
@@ -48,16 +53,19 @@ Environment:
 
 Examples:
   subq ask "Is this spam?" "You won a free cruise, click here"
-  cat ticket.txt | subq ask "Which team owns this?" --choice billing,tech,sales
-  subq ask "How urgent is this?" --score low,medium,high < ticket.txt
-  subq ask "Is the screen cracked?" "Customer photo" -i phone.jpg
-  subq chat "Explain SSE in two sentences"
-  git diff | subq chat "Write a commit message for this diff"`;
+  subq ask "Which team owns this?" --choice billing,tech,sales < ticket.txt
+  git diff --cached | subq ask -t 0.5 "Does this diff add a secret or API key?" && echo "check your diff"
+  subq filter "Is this a complaint?" < reviews.txt
+  ls photos/*.jpg | subq filter -f "Is there a person in this photo?"
+  subq each "How urgent is this?" --score low,medium,high < tickets.txt | sort -rn
+
+Enterprise keys with subq-preview also get chat:
+  subq chat [prompt] [-s system] [-e effort]      subq -p <prompt>`;
 
 const HINTS = {
   401: "Invalid or missing API key. Run `subq login`.",
   402: "Out of credits. Top up at https://console.subq.ai",
-  403: "This API key cannot use that model. Run `subq models` to see what it can use.",
+  403: "This API key cannot use that model (subq-preview is enterprise only). Run `subq models` to see what it can use.",
   429: "Rate limited. Wait a moment and retry.",
   503: "SubQ is temporarily unavailable. Retry shortly.",
 };
@@ -79,16 +87,21 @@ function apiKey() {
 
 async function api(path, body, key = apiKey(), signal) {
   let res;
-  try {
-    res = await fetch(BASE + path, {
-      method: body ? "POST" : "GET",
-      headers: { Authorization: `Bearer ${key}`, ...(body && { "Content-Type": "application/json" }) },
-      body: body && JSON.stringify(body),
-      signal,
-    });
-  } catch (e) {
-    if (signal?.aborted) fail("Interrupted");
-    fail(`Could not reach ${BASE}: ${e.cause?.message || e.message}`);
+  // Rate limits and brief outages are retried three times: after 0.5s, 1s and 2s.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await fetch(BASE + path, {
+        method: body ? "POST" : "GET",
+        headers: { Authorization: `Bearer ${key}`, ...(body && { "Content-Type": "application/json" }) },
+        body: body && JSON.stringify(body),
+        signal,
+      });
+    } catch (e) {
+      if (signal?.aborted) fail("Interrupted");
+      fail(`Could not reach ${BASE}: ${e.cause?.message || e.message}`);
+    }
+    if ((res.status !== 429 && res.status !== 503) || attempt === 3) break;
+    await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
   }
   if (!res.ok) {
     const text = await res.text();
@@ -174,63 +187,71 @@ async function models(argv) {
 // ponytail: options split on commas, so a description cannot contain one. Use the API directly if you need that.
 const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
 
+const options = (s) =>
+  Object.fromEntries(
+    list(s).map((item) => {
+      const [label, ...desc] = item.split("=");
+      return [label.trim(), desc.join("=").trim() || null];
+    }),
+  );
+// The API returns float32 noise like 0.9844077229499817; three decimals is all the signal there is.
+const round = (v) => (typeof v === "number" ? +v.toFixed(3) : v);
+
 const MEDIA = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
+
+function image(path) {
+  const mediaType = MEDIA[extname(path).toLowerCase()] || fail(`${path}: images must be .png, .jpg, .jpeg or .webp`);
+  try {
+    return { mediaType, base64: readFileSync(path).toString("base64") };
+  } catch (e) {
+    fail(`${path}: ${e.message}`);
+  }
+}
+
+const JUDGE = {
+  yes: { type: "string" },
+  no: { type: "string" },
+  choice: { type: "string" },
+  score: { type: "string" },
+  threshold: { type: "string", short: "t" },
+  model: { type: "string", short: "m", default: "subq-snap-preview" },
+};
+
+function question(instructions, o) {
+  if (o.choice && o.score) fail("Use --choice or --score, not both.");
+  if (o.choice) return { type: "choice", instructions, criteria: options(o.choice) };
+  if (o.score) return { type: "score", instructions, criteria: list(o.score) };
+  const criteria = { ...(o.yes && { true: o.yes }), ...(o.no && { false: o.no }) };
+  return { type: "noul", instructions, ...((o.yes || o.no) && { criteria }) };
+}
+
+function threshold(o, fallback) {
+  const t = Number(o.threshold ?? fallback);
+  if (!(t >= 0 && t <= 1)) fail("--threshold must be a number from 0 to 1.");
+  return t;
+}
 
 async function ask(argv, fallbackState) {
   const { values: o, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
-    options: {
-      yes: { type: "string" },
-      no: { type: "string" },
-      choice: { type: "string" },
-      score: { type: "string" },
-      image: { type: "string", short: "i", multiple: true },
-      model: { type: "string", short: "m", default: "subq-snap-preview" },
-      json: { type: "boolean" },
-    },
+    options: { ...JUDGE, image: { type: "string", short: "i", multiple: true }, json: { type: "boolean" } },
   });
   const [instructions, ...rest] = positionals;
   if (!instructions) fail('Missing question. Example: subq ask "Is this spam?" "You won a free cruise"');
-  if (o.choice && o.score) fail("Use --choice or --score, not both.");
+  const q = question(instructions, o);
+  if (o.threshold != null && q.type !== "noul") fail("--threshold only works with yes/no questions.");
   const state = rest.join(" ") || (await readStdin()) || fallbackState;
   if (!state) fail("Missing state: pass the text to judge as a second argument or pipe it on stdin.");
 
-  const question = { type: "noul", instructions };
-  if (o.choice) {
-    question.type = "choice";
-    question.criteria = Object.fromEntries(
-      list(o.choice).map((item) => {
-        const [label, ...desc] = item.split("=");
-        return [label.trim(), desc.join("=").trim() || null];
-      }),
-    );
-  } else if (o.score) {
-    question.type = "score";
-    question.criteria = list(o.score);
-  } else if (o.yes || o.no) {
-    question.criteria = { ...(o.yes && { true: o.yes }), ...(o.no && { false: o.no }) };
-  }
-
-  const images = (o.image ?? []).map((path) => {
-    const mediaType = MEDIA[extname(path).toLowerCase()] || fail(`${path}: images must be .png, .jpg, .jpeg or .webp`);
-    let bytes;
-    try {
-      bytes = readFileSync(path);
-    } catch (e) {
-      fail(`${path}: ${e.message}`);
-    }
-    return { mediaType, base64: bytes.toString("base64") };
-  });
-
-  const body = { model: o.model, state, questions: { answer: question }, ...(images.length && { images }) };
+  const images = (o.image ?? []).map(image);
+  const body = { model: o.model, state, questions: { answer: q }, ...(images.length && { images }) };
   const out = await (await api("/systemone", body)).json();
+  const a = out.answers?.answer ?? fail(`Unexpected response: ${JSON.stringify(out)}`);
+  if (o.threshold != null && a.noul < threshold(o)) process.exitCode = 1;
   if (o.json) return console.log(JSON.stringify(out, null, 2));
 
   // The answer alone goes to stdout so it pipes cleanly; details go to stderr.
-  const a = out.answers?.answer ?? fail(`Unexpected response: ${JSON.stringify(out)}`);
-  // The API returns float32 noise like 0.9844077229499817; three decimals is all the signal there is.
-  const round = (v) => (typeof v === "number" ? +v.toFixed(3) : v);
   console.log(round(a[a.type]));
   const details = [];
   if (a.probabilities) {
@@ -240,6 +261,64 @@ async function ask(argv, fallbackState) {
   if (a.confidence != null) details.push(`confidence ${round(a.confidence)}`);
   if (out.usage) details.push(`tokens: ${out.usage.input_tokens} in / ${out.usage.output_tokens} out`);
   if (details.length) console.error(dim(details.join(" | ")));
+}
+
+// `subq each` and `subq filter`: one question over every line of stdin, a few requests at a time, output in input order.
+async function each(argv, filtering) {
+  const { values: o, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      ...JUDGE,
+      files: { type: "boolean", short: "f" },
+      invert: { type: "boolean", short: "v" },
+      jobs: { type: "string", short: "j", default: "8" },
+    },
+  });
+  const name = filtering ? "filter" : "each";
+  const instructions = positionals.join(" ");
+  if (!instructions) fail(`Missing question. Example: subq ${name} "Is this a complaint?" < reviews.txt`);
+  const q = question(instructions, o);
+  if (filtering && q.type !== "noul") fail("filter asks a yes/no question. Use `subq each` with --choice or --score.");
+  const keep = threshold(o, 0.5);
+  if (process.stdin.isTTY) fail(`Pipe the lines to judge on stdin. Example: subq ${name} "Is this a complaint?" < reviews.txt`);
+  const lines = (await readStdin()).split("\n").filter((line) => line.trim());
+
+  const load = (line) => {
+    if (!o.files) return { state: line };
+    const path = line.trim();
+    if (MEDIA[extname(path).toLowerCase()]) return { state: "See the attached image.", images: [image(path)] };
+    try {
+      return { state: readFileSync(path, "utf8").trim() || "(empty file)" };
+    } catch (e) {
+      fail(`${path}: ${e.message}`);
+    }
+  };
+
+  const answers = [];
+  let next = 0;
+  let printed = 0;
+  let matched = 0;
+  let tokens = 0;
+  const worker = async () => {
+    while (next < lines.length) {
+      const i = next++;
+      const out = await (await api("/systemone", { model: o.model, ...load(lines[i]), questions: { answer: q } })).json();
+      answers[i] = out.answers?.answer ?? fail(`Unexpected response: ${JSON.stringify(out)}`);
+      tokens += (out.usage?.input_tokens ?? 0) + (out.usage?.output_tokens ?? 0);
+      for (; answers[printed]; printed++) {
+        const a = answers[printed];
+        if (!filtering) console.log(`${round(a[a.type])}\t${lines[printed]}`);
+        else if (a.noul >= keep !== !!o.invert) {
+          matched++;
+          console.log(lines[printed]);
+        }
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(+o.jobs || 8, 32)) }, worker));
+  console.error(dim(`${lines.length} judged${filtering ? `, ${matched} kept` : ""}, ${tokens} tokens`));
+  if (filtering && !matched) process.exitCode = 1;
 }
 
 // Streams a chat completion, calling onDelta for each piece of text.
@@ -304,7 +383,7 @@ async function print(argv) {
   return ask(argv, "No additional context was provided.");
 }
 
-const MODELS = { "subq-preview": "chat", "subq-snap-preview": "yes/no questions" };
+const MODELS = { "subq-preview": "chat · enterprise only", "subq-snap-preview": "yes/no, choice and scale questions" };
 
 const TUI_HELP = [
   ["/help", "show this list"],
@@ -319,6 +398,9 @@ const TUI_HELP = [
   ["/login", "save a different API key"],
   ["/logout", "delete the saved API key"],
   ["/exit", "quit (or Ctrl-D)"],
+  ["question [a, b, c]", "pick one of the options"],
+  ["question [low < mid < high]", "rate on a scale"],
+  ["question | text", "judge that text"],
   ["@path", "attach a file or image to your message"],
   ["!command", "run a shell command and ask about its output"],
   ["\\ at end of line", "continue on the next line"],
@@ -357,7 +439,7 @@ async function tui(o = {}) {
       if (!(e instanceof Fail)) throw e;
     }
   }
-  const HOW = "Ask a yes/no question. Add `| text` or @file to judge something.";
+  const HOW = "Ask a yes/no question. Add `| text` or @file to judge something.\nOr give options: Which team? [billing, tech]  How urgent? [low < mid < high]";
   let messages = [];
   let busy = false;
   let picking = false;
@@ -373,7 +455,7 @@ async function tui(o = {}) {
       "",
       faint("/ commands · @ files · ! shell · Esc to interrupt"),
       faint(`model: ${model}`),
-      ...(decision() ? [faint(HOW)] : []),
+      ...(decision() ? HOW.split("\n").map(faint) : []),
       faint(`cwd: ${process.cwd().replace(homedir(), "~")}`),
     ];
     const inner = Math.max(...rows.map(width));
@@ -533,20 +615,29 @@ async function tui(o = {}) {
     const given = [cut < 0 ? "" : text.slice(cut + 1).trim(), docs].filter(Boolean).join("\n\n");
     const state = given || context || (images.length ? "See the attached image." : "No additional context was provided.");
     if (!instructions) return note("usage: Is this spam? | You won a free cruise");
+    // A trailing [a, b, c] makes it a choice, [low < mid < high] a scale.
+    const q = { type: "noul", instructions };
+    const tail = instructions.match(/^(.*\S)\s*\[([^\[\]]+)\]$/s);
+    const levels = tail ? tail[2].split("<").map((x) => x.trim()).filter(Boolean) : [];
+    if (levels.length > 1) Object.assign(q, { type: "score", instructions: tail[1], criteria: levels });
+    else if (tail && list(tail[2]).length > 1) Object.assign(q, { type: "choice", instructions: tail[1], criteria: options(tail[2]) });
     return run(async (stop, signal) => {
-      const body = {
-        model: decision() ? model : "subq-snap-preview",
-        state,
-        questions: { answer: { type: "noul", instructions } },
-        ...(images.length && { images }),
-      };
+      const body = { model: decision() ? model : "subq-snap-preview", state, questions: { answer: q }, ...(images.length && { images }) };
       const out = await (await api("/systemone", body, undefined, signal)).json();
       stop();
-      const p = out.answers?.answer?.noul;
-      if (typeof p !== "number") fail(`Unexpected response: ${JSON.stringify(out)}`);
-      const filled = Math.round(p * 20);
-      const bar = accent("█".repeat(filled)) + faint("░".repeat(20 - filled));
-      console.log(`${accent("●")} ${bold(p >= 0.5 ? "Yes" : "No")}  ${bar} ${Math.round(p * 100)}% yes`);
+      const a = out.answers?.answer;
+      if (a?.[a.type] == null) fail(`Unexpected response: ${JSON.stringify(out)}`);
+      const bar = (p) => accent("█".repeat(Math.round(p * 20))) + faint("░".repeat(20 - Math.round(p * 20)));
+      const pct = (p) => `${Math.round(p * 100)}%`.padStart(4);
+      if (a.type === "noul") console.log(`${accent("●")} ${bold(a.noul >= 0.5 ? "Yes" : "No")}  ${bar(a.noul)} ${pct(a.noul)} yes`);
+      else {
+        const label = (k) => String(a.legend?.[k] ?? k);
+        const rows = Object.entries(a.probabilities ?? {});
+        const wide = Math.max(0, ...rows.map(([k]) => label(k).length));
+        if (a.type === "choice") console.log(`${accent("●")} ${bold(a.choice)}`);
+        else console.log(`${accent("●")} ${bold(label(Math.round(a.score)))}  ${faint(`${round(a.score)} on a 0 to ${levels.length - 1} scale`)}`);
+        for (const [k, p] of rows) console.log(`  ${label(k).padEnd(wide)}  ${bar(p)} ${pct(p)}`);
+      }
       if (out.usage) count(out.usage, "input_tokens", "output_tokens");
     });
   };
@@ -581,7 +672,7 @@ async function tui(o = {}) {
       }));
       const choice = await pick("Select a model  ↑↓ move · Enter choose · Esc cancel", items, items.findIndex((i) => i.id === model));
       if (!choice) return note(`model unchanged (${model})`);
-      if (choice.locked) return note(`${choice.id} is not enabled for this API key. Ask SubQ to turn it on for your account.`);
+      if (choice.locked) return note(`${choice.id} is not enabled for this API key.${choice.id === "subq-preview" ? " SubQ offers it to enterprise accounts only." : ""}`);
       model = choice.id;
       note(`model set to ${model}${decision() ? `\n${HOW}` : ""}`);
     } else if (name === "/effort") {
@@ -606,7 +697,7 @@ async function tui(o = {}) {
       note(`loaded ${arg} (${context.length} characters). Questions are now asked about this file.`);
     } else if (name === "/status") {
       console.log(`  ${faint("version")}  ${version}`);
-      console.log(`  ${faint("model")}    ${model} ${faint(`(${decision() ? "yes/no questions" : "chat"})`)}`);
+      console.log(`  ${faint("model")}    ${model} ${faint(`(${decision() ? "judgments" : "chat"})`)}`);
       console.log(`  ${faint("api key")}  ${process.env.SUBQ_API_KEY ? "SUBQ_API_KEY environment variable" : CONFIG}`);
       console.log(`  ${faint("api")}      ${BASE}`);
       console.log(`  ${faint("context")}  ${context ? `${context.length} characters` : "none"}`);
@@ -744,7 +835,7 @@ async function tui(o = {}) {
   bye();
 }
 
-const commands = { login, logout, models, ask, chat };
+const commands = { login, logout, models, ask, chat, each, filter: (argv) => each(argv, true) };
 const [cmd, ...rest] = process.argv.slice(2);
 try {
   if (!cmd && process.stdin.isTTY && process.stdout.isTTY) await tui();
