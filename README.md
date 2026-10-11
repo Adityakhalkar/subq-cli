@@ -31,27 +31,27 @@ subq login
 Run `subq` with no arguments to open a session in your terminal. The first time, it asks for your API key. If you use Claude Code, the keys and commands will feel familiar.
 
 ```
-╭──────────────────────────────────────────────────────────────────────────────╮
-│ ✻ subq v0.4.0                                                                │
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ██  ██  SubQ community CLI v0.5.0                                            │
+│   ██    model: subq-snap-preview                                             │
+│ ██  ██  cwd: ~/projects/app                                                  │
 │                                                                              │
 │ / commands · @ files · ! shell · Esc to interrupt                            │
-│ model: subq-snap-preview                                                     │
 │ Ask a yes/no question. Add `| text` or @file to judge something.             │
 │ Or give options: Which team? [billing, tech]  How urgent? [low < mid < high] │
-│ cwd: ~/projects/app                                                          │
-╰──────────────────────────────────────────────────────────────────────────────╯
+└──────────────────────────────────────────────────────────────────────────────┘
 
 > Is this spam? | You won a free cruise, click here to claim
-● Yes  ████████████████████  98% yes
+■ Yes  ████████████████████  98% yes
 
 > Which team owns this? [billing, tech, sales] | I was charged twice
-● billing
+■ billing
   billing  ███████████████████░  97%
   tech     ░░░░░░░░░░░░░░░░░░░░   1%
   sales    ░░░░░░░░░░░░░░░░░░░░   1%
 
 > How urgent is this? [low < medium < high] | The server is down for all customers
-● high  1.946 on a 0 to 2 scale
+■ high  1.946 on a 0 to 2 scale
   low     ░░░░░░░░░░░░░░░░░░░░   2%
   medium  ░░░░░░░░░░░░░░░░░░░░   2%
   high    ███████████████████░  96%
@@ -179,7 +179,8 @@ Every command takes `-m <model>` to override the model. `SUBQ_BASE_URL` override
 ## Development
 
 ```sh
-npm test        # runs the CLI against a local mock of the API
+npm test                  # runs the CLI against a local mock of the API
+cd demo && vhs demo.tape  # re-records the demo video (needs vhs and a logged-in key)
 ```
 
 ## License

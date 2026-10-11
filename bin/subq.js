@@ -410,7 +410,14 @@ const TUI_HELP = [
 async function tui(o = {}) {
   const color = process.stdout.isTTY && !process.env.NO_COLOR;
   const paint = (code) => (s) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
-  const accent = paint("38;5;141");
+  // SubQ's palette: the five squares of its logo, with the orange as the accent. 256-colour fallbacks for older terminals.
+  const rich = /truecolor|24bit/.test(process.env.COLORTERM || "");
+  const hue = (rgb, fallback) => paint(rich ? `38;2;${rgb}` : `38;5;${fallback}`);
+  const accent = hue("235;82;30", 202);
+  const gray = hue("153;148;137", 245);
+  const squares = [hue("255;226;55", 220), hue("45;91;255", 27), gray, accent, hue("63;125;49", 64)];
+  const [yellow, blue, , orange, green] = squares.map((c) => c("██"));
+  const LOGO = [`${yellow}  ${blue}`, `  ${gray("██")}  `, `${orange}  ${green}`];
   const faint = paint("2");
   const bold = paint("1");
   const red = paint("31");
@@ -419,7 +426,7 @@ async function tui(o = {}) {
   try {
     apiKey();
   } catch {
-    console.log(`${accent("✻")} Welcome to subq. Paste your API key to get started (create one at https://console.subq.ai).`);
+    console.log(`${accent("■")} Welcome to subq. Paste your API key to get started (create one at https://console.subq.ai).`);
     await login();
   }
 
@@ -439,6 +446,8 @@ async function tui(o = {}) {
       if (!(e instanceof Fail)) throw e;
     }
   }
+  // The chat-only commands are left out of the lists while a judgment model is selected.
+  const shown = () => TUI_HELP.filter(([cmd]) => !decision() || !/^\/(effort|system)/.test(cmd));
   const HOW = "Ask a yes/no question. Add `| text` or @file to judge something.\nOr give options: Which team? [billing, tech]  How urgent? [low < mid < high]";
   let messages = [];
   let busy = false;
@@ -451,17 +460,17 @@ async function tui(o = {}) {
 
   const banner = () => {
     const rows = [
-      `${accent("✻")} ${bold("subq")} ${faint(`v${version}`)}`,
+      `${LOGO[0]}  ${bold("SubQ")} ${faint(`community CLI v${version}`)}`,
+      `${LOGO[1]}  ${faint(`model: ${model}`)}`,
+      `${LOGO[2]}  ${faint(`cwd: ${process.cwd().replace(homedir(), "~")}`)}`,
       "",
       faint("/ commands · @ files · ! shell · Esc to interrupt"),
-      faint(`model: ${model}`),
       ...(decision() ? HOW.split("\n").map(faint) : []),
-      faint(`cwd: ${process.cwd().replace(homedir(), "~")}`),
     ];
     const inner = Math.max(...rows.map(width));
-    console.log(accent(`╭${"─".repeat(inner + 2)}╮`));
-    for (const row of rows) console.log(`${accent("│")} ${row}${" ".repeat(inner - width(row))} ${accent("│")}`);
-    console.log(accent(`╰${"─".repeat(inner + 2)}╯`));
+    console.log(gray(`┌${"─".repeat(inner + 2)}┐`));
+    for (const row of rows) console.log(`${gray("│")} ${row}${" ".repeat(inner - width(row))} ${gray("│")}`);
+    console.log(gray(`└${"─".repeat(inner + 2)}┘`));
   };
   const note = (text, paintFn = faint) => console.log(paintFn(`  ⎿ ${text.replaceAll("\n", "\n    ")}`));
   const count = (usage, inKey, outKey) => {
@@ -471,13 +480,15 @@ async function tui(o = {}) {
   };
 
   const spinner = () => {
-    const frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
     const began = Date.now();
     let i = 0;
+    // One square stepping through the logo's five colours.
     const draw = () =>
-      process.stdout.write(`\r${accent(frames[i++ % frames.length])} ${faint(`Thinking… ${Math.floor((Date.now() - began) / 1000)}s`)}`);
+      process.stdout.write(
+        `\r${squares[i++ % squares.length]("■")} ${faint(`${decision() ? "Judging" : "Thinking"}… ${Math.floor((Date.now() - began) / 1000)}s`)}`,
+      );
     draw();
-    const timer = setInterval(draw, 80);
+    const timer = setInterval(draw, 120);
     let stopped = false;
     return () => {
       if (stopped) return;
@@ -588,7 +599,7 @@ async function tui(o = {}) {
           (delta) => {
             if (!started) {
               stop();
-              process.stdout.write(accent("● "));
+              process.stdout.write(accent("■ "));
               started = true;
             }
             process.stdout.write(delta);
@@ -629,13 +640,13 @@ async function tui(o = {}) {
       if (a?.[a.type] == null) fail(`Unexpected response: ${JSON.stringify(out)}`);
       const bar = (p) => accent("█".repeat(Math.round(p * 20))) + faint("░".repeat(20 - Math.round(p * 20)));
       const pct = (p) => `${Math.round(p * 100)}%`.padStart(4);
-      if (a.type === "noul") console.log(`${accent("●")} ${bold(a.noul >= 0.5 ? "Yes" : "No")}  ${bar(a.noul)} ${pct(a.noul)} yes`);
+      if (a.type === "noul") console.log(`${accent("■")} ${bold(a.noul >= 0.5 ? "Yes" : "No")}  ${bar(a.noul)} ${pct(a.noul)} yes`);
       else {
         const label = (k) => String(a.legend?.[k] ?? k);
         const rows = Object.entries(a.probabilities ?? {});
         const wide = Math.max(0, ...rows.map(([k]) => label(k).length));
-        if (a.type === "choice") console.log(`${accent("●")} ${bold(a.choice)}`);
-        else console.log(`${accent("●")} ${bold(label(Math.round(a.score)))}  ${faint(`${round(a.score)} on a 0 to ${levels.length - 1} scale`)}`);
+        if (a.type === "choice") console.log(`${accent("■")} ${bold(a.choice)}`);
+        else console.log(`${accent("■")} ${bold(label(Math.round(a.score)))}  ${faint(`${round(a.score)} on a 0 to ${levels.length - 1} scale`)}`);
         for (const [k, p] of rows) console.log(`  ${label(k).padEnd(wide)}  ${bar(p)} ${pct(p)}`);
       }
       if (out.usage) count(out.usage, "input_tokens", "output_tokens");
@@ -648,7 +659,7 @@ async function tui(o = {}) {
     // A unique prefix is enough: /mo runs /model.
     const matches = names.filter((n) => n.startsWith(typed));
     const name = !names.includes(typed) && matches.length === 1 ? matches[0] : typed;
-    if (name === "/help") for (const [cmd, what] of TUI_HELP) console.log(`  ${accent(cmd.padEnd(26))} ${faint(what)}`);
+    if (name === "/help") for (const [cmd, what] of shown()) console.log(`  ${accent(cmd.padEnd(26))} ${faint(what)}`);
     else if (name === "/clear") {
       messages = [];
       context = undefined;
@@ -764,7 +775,7 @@ async function tui(o = {}) {
   // Lists matching commands under the prompt while a slash command is being typed.
   const menu = () => {
     if (busy || picking || secret) return;
-    const hits = /^\/\S*$/.test(rl.line) ? TUI_HELP.filter(([cmd]) => cmd.split(" ")[0].startsWith(rl.line)) : [];
+    const hits = /^\/\S*$/.test(rl.line) ? shown().filter(([cmd]) => cmd.split(" ")[0].startsWith(rl.line)) : [];
     if (!hits.length && !menuRows) return;
     const rows = hits.map(([cmd, what]) => faint(`  ${cmd.padEnd(26)} ${what}`.slice(0, (process.stdout.columns || 80) - 1)));
     menuRows = rows.length;
