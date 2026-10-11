@@ -8,3 +8,6 @@ demo/launch/*.wav
 demo/launch/events.json
 demo/setup.sh
 demo/clips/
+demo/film/*.mp4
+demo/film/*.wav
+demo/film/events.json

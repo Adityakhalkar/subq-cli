@@ -1,0 +1,67 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;1,400&family=Roboto+Mono:wght@400;500&display=block" rel="stylesheet">
+<style>html,body{margin:0;background:#f0ede8}canvas{display:block}</style><script src="data.js"></script></head><body><canvas id="c" width="1920" height="1080"></canvas><script>
+// One square is one answer. It starts as the cursor and never leaves the screen.
+const W=1920,H=1080,ctx=document.getElementById('c').getContext('2d'),off=document.createElement('canvas');off.width=W;off.height=H;const g=off.getContext('2d');
+const INK=[15,14,13],OR=[235,82,30],GRAY=[153,148,137],SOFT='#857f74',LOGOC=[[255,226,55],[8,52,188],GRAY,OR,[63,125,49]],LOGOP=[[0,0],[2,0],[1,1],[0,2],[2,2]];
+const cl=(x,a=0,b=1)=>Math.min(b,Math.max(a,x)),P=(t,a,d)=>cl((t-a)/d),lerp=(a,b,x)=>a+(b-a)*x;
+const out=x=>1-(1-x)**3,inn=x=>x**3,io=x=>x<.5?4*x*x*x:1-(-2*x+2)**3/2,back=x=>1+2.2*(x-1)**3+1.2*(x-1)**2;
+const rnd=i=>{const x=Math.sin(i*127.1+311.7)*43758.5453;return x-Math.floor(x)};
+const MONO=(px,w=400)=>`${w} ${px}px "Roboto Mono"`,SERIF=(px,it)=>`${it?'italic ':''}400 ${px}px "Libre Baskerville"`;
+const REV=[['The app crashes every time I open settings',1,1.717],['Love the new dark mode, great work',0,.035],['I was charged twice this month, refund me now',1,1.838],['How do I export my data to CSV?',0,.158],['Worst support I have ever dealt with',1,.307],['Thanks, that fixed it!',0,.053]];
+const ORDER=REV.map(r=>REV.filter(q=>q[2]>r[2]).length);
+const CAPS=[['is this spam?',.6,1.1,5.9],['is this a complaint?',5.9,.7,9],['how urgent is each one?',9,.7,12.2],['is this pixel part of a heart?',12.2,.9,18.6]];
+const EV=[],ev=(t,k,v)=>EV.push({t,k,v});
+CAPS.forEach(([s,t0,d])=>{for(let i=0;i<s.length;i++)if(s[i]!==' ')ev(t0+d*i/s.length,'key')});
+ev(3.2,'fill');ev(4.3,'yes');REV.forEach((r,i)=>ev(6.8+i*.25,r[1]?'y':'n'));ev(9,'stretch');ev(10.4,'sort');ev(12.2,'burst');ev(13.6,'sweep',3.2);ev(17.2,'lub');ev(17.5,'dub');ev(18.6,'gather');ev(20.1,'land');ev(21.6,'end');
+const typedCap=(c,t)=>c[0].slice(0,Math.floor(P(t,c[1],c[2])*c[0].length));
+
+// ---- layouts: each returns the state of square i at time t
+const sq=(x,y,w,h,o={})=>({x,y,w,h,c:OR,a:1,lv:1,s:0,...o});
+function LA(i,t){g.font=MONO(40,500);const x=760+g.measureText(typedCap(CAPS[0],t)).width+16;return sq(x,527,18,44,{a:i?0:(t<.6||t>1.7)&&Math.floor(t*2.5)%2?0:1})}
+const LB=(i,t)=>sq(960,540,300,300,{a:i?0:1,lv:.98*out(P(t,3.2,1)),s:i?0:1});
+const LC=(i,t)=>sq(1500,790,120,120,{a:i?0:1});
+function LD(i,t){const r=i%6,tj=6.8+r*.25,j=P(t,tj,.25),yes=REV[r][1];return sq(330,250+r*100,48,48,{a:i<6?1:0,lv:yes?out(j):0,s:i<6?(yes?1:lerp(1,.3,j)):0,k:yes?1:lerp(1,.72,out(j))})}
+function LE(i,t){const r=i%6,w=48+REV[r][2]/2*600,pos=lerp(r,ORDER[r],io(P(t,10.4,.8)));return sq(306+w/2,250+pos*100,w,48,{a:i<6?1:0})}
+const curve=p=>cl((p-.6)/.25);
+function LF(i,t){const col=i%40,row=i/40|0,ta=13.6+i/1600*3.2,on=t>=ta,beat=1+.04*(Math.exp(-(((t-17.2)/.07)**2))+Math.exp(-(((t-17.5)/.07)**2)));
+  return sq(960+(col-19.5)*21*beat,560+(row-19.5)*21*beat,19*beat,19*beat,{c:on?OR:GRAY,a:on?curve(HEART[i]):.16,k:on?lerp(1.7,1,out(P(t,ta,.2))):1})}
+function logoAt(i,cx,cy,size){const b=i%5,n=i/5|0,w=size/16,h=size/20;return sq(cx+(LOGOP[b][0]-1)*size+((n%16)+.5-8)*w,cy+(LOGOP[b][1]-1)*size+((n/16|0)+.5-10)*h,w+.7,h+.7,{c:LOGOC[b]})}
+const LG=i=>logoAt(i,960,500,200),LH=i=>logoAt(i,960,270,64);
+const KF=[[0,0,LA],[2.4,.8,LB],[4.3,.6,LC],[5.9,.8,LD],[9,.8,LE],[12.2,1.2,LF,i=>rnd(i)*.45],[18.6,1.5,LG,i=>rnd(i+9)*.6],[21.6,1,LH]];
+function state(i,t){let k=0;while(k+1<KF.length&&KF[k+1][0]<=t)k++;const [t0,d,L,delay]=KF[k],b=L(i,t);if(!k)return b;
+  const dl=delay?delay(i):0,p=io(P(t,t0+dl,d-(delay?.6:0)));if(p>=1)return b;const a=KF[k-1][2](i,t),m=(u,v)=>lerp(u,v,p);
+  return {x:m(a.x,b.x),y:m(a.y,b.y),w:m(a.w,b.w),h:m(a.h,b.h),a:m(a.a,b.a),lv:m(a.lv,b.lv),s:m(a.s,b.s),k:m(a.k??1,b.k??1),c:a.c.map((u,j)=>m(u,b.c[j]))}}
+
+function frame(t){
+  g.setTransform(1,0,0,1,0,0);g.fillStyle='#f0ede8';g.fillRect(0,0,W,H);
+  const z=1+.012*Math.sin(t*.5);g.setTransform(z,0,0,z,960*(1-z),540*(1-z));g.textBaseline='alphabetic';
+  // giant "yes": the square is its full stop
+  if(t>=4.3&&t<6.2){const x=140-2400*inn(P(t,5.6,.5));g.save();g.beginPath();g.rect(0,0,1380*out(P(t,4.3,.7))+140,H);g.clip();g.font=SERIF(760,1);g.fillStyle='#0f0e0d';g.fillText('yes',x,850);g.restore()}
+  // squares
+  const n=t<12.2?6:1600;
+  for(let i=0;i<n;i++){const s=state(i,t);if(s.a<=.004&&s.s<=.004)continue;const k=s.k??1,w=s.w*k,h=s.h*k,x=s.x-w/2,y=s.y-h/2;
+    if(s.a>.004&&s.lv>.004){g.fillStyle=`rgba(${s.c.map(Math.round)},${s.a})`;g.fillRect(x,y+h*(1-s.lv),w,h*s.lv)}
+    if(s.s>.004){g.strokeStyle=`rgba(15,14,13,${s.s})`;g.lineWidth=Math.max(3,w/50);g.strokeRect(x,y,w,h)}
+    if(i<6&&t>=6.1&&t<12.6){const r=REV[i],al=P(t,6.1+i*.05,.4)*(1-P(t,12.2,.3))*(t<9&&!r[1]?lerp(1,.28,P(t,6.8+i*.25,.25)):1);
+      g.font=MONO(36);g.fillStyle=`rgba(15,14,13,${al})`;g.fillText(r[0],s.x+s.w/2+34,s.y+13);
+      if(t>=9.5){g.font=MONO(30,500);g.fillStyle=`rgba(235,82,30,${P(t,9.5+i*.06,.3)*(1-P(t,12.2,.3))})`;g.fillText((r[2]*out(P(t,9.5+i*.06,.5))).toFixed(3),170,s.y+11)}}}
+  // the answer, read out beside the gauge
+  if(t>=3.2&&t<4.5){g.font=MONO(44,500);g.fillStyle=`rgba(15,14,13,${1-P(t,4.3,.2)})`;g.fillText((.98*out(P(t,3.2,1))).toFixed(2),1150,555)}
+  // captions: the question being asked, typed small
+  for(const c of CAPS){if(t<c[1]||t>=c[3]+.3)continue;const first=c===CAPS[0],m=first?io(P(t,2.4,.8)):1,px=lerp(40,28,m),al=1-P(t,c[3],.3);
+    g.font=MONO(px,500);const s=typedCap(c,t),x=lerp(760,120,m),y=lerp(540,124,m);g.fillStyle=first&&m<1?`rgba(15,14,13,${al})`:`rgba(133,127,116,${al})`;g.fillText(s,x,y);
+    if(!first&&t<c[1]+c[2]+.4){g.fillStyle=`rgba(235,82,30,${al})`;g.fillRect(x+g.measureText(s).width+8,y-24,12,29)}}
+  if(t>=13.6&&t<18.9){const al=1-P(t,18.6,.3);g.font=MONO(26);g.fillStyle=`rgba(133,127,116,${al})`;g.fillText(`${Math.min(1600,Math.floor(P(t,13.6,3.2)*1600)).toLocaleString()} / 1,600`,120,990);
+    g.font=MONO(34);g.fillStyle=`rgba(15,14,13,${al*P(t,17,.4)})`;g.fillText('24 seconds',1470,540);g.fillStyle=`rgba(235,82,30,${al*P(t,17.25,.4)})`;g.fillText('2 cents',1470,592)}
+  g.textAlign='center';
+  if(t>=20.3&&t<21.9){g.font=MONO(30);g.fillStyle=`rgba(133,127,116,${P(t,20.3,.5)*(1-P(t,21.6,.3))})`;g.fillText('a model that only says yes or no',960,940)}
+  if(t>=22){const up=a=>(1-out(P(t,a,.6)))*40;g.font=SERIF(210);g.fillStyle=`rgba(15,14,13,${P(t,22,.5)})`;g.fillText('subq-cli',960,680+up(22));
+    g.font=MONO(40,500);g.fillStyle=`rgba(15,14,13,${P(t,22.5,.5)})`;g.fillText('npm i -g subq-cli',960,820+up(22.5));
+    g.font=MONO(26);g.fillStyle=`rgba(133,127,116,${P(t,23,.5)})`;g.fillText('github.com/Adityakhalkar/subq-cli',960,885);g.font=MONO(20);g.fillText("a community tool for SubQ's Decisions API · not an official SubQ product",960,1020)}
+  g.textAlign='left';
+}
+// eight sub-frames across a 1/60s shutter, averaged, for motion blur
+function render(t){ctx.globalAlpha=1;for(let k=0;k<8;k++){frame(t+k/480);ctx.globalAlpha=1/(k+1);ctx.drawImage(off,0,0)}}
+document.fonts.ready.then(async()=>{await Promise.all(['400 20px "Libre Baskerville"','italic 400 20px "Libre Baskerville"','400 20px "Roboto Mono"','500 20px "Roboto Mono"'].map(f=>document.fonts.load(f)));render(0);window.READY=true});
+</script></body></html>
